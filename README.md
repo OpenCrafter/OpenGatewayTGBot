@@ -1,124 +1,141 @@
+
 <div dir="rtl">
 
-# 🤖 Ultimate Serverless AI Gateway Bot
+# 🤖 ربات دروازه هوش مصنوعی سرورلس
 
-### دروازه‌ی هوش مصنوعی سرورلس برای تلگرام با Cloudflare Workers
+### دروازه هوشمند هوش مصنوعی برای تلگرام با Cloudflare Workers
 
 یک ربات تلگرام قدرتمند، سریع و کاملاً رایگان که ده‌ها مدل هوش مصنوعی را از طریق یک درگاه واحد در اختیار کاربران قرار می‌دهد.
+
+این پروژه یک هاب هوش مصنوعی چندمدلی است که امکان اتصال هم‌زمان به سرویس‌های مختلف هوش مصنوعی، مدیریت کاربران، کنترل مدل‌ها و ایجاد تجربه‌ای هوشمند در تلگرام را فراهم می‌کند.
 
 ---
 
 # 📖 معرفی پروژه
 
-**Ultimate Serverless AI Gateway Bot** یک ربات تلگرام تک‌فایلی (Single File) است که به‌طور کامل روی **Cloudflare Workers** و پایگاه‌داده **Cloudflare D1** اجرا می‌شود.
+**ربات دروازه هوش مصنوعی سرورلس** یک ربات تلگرام تک‌فایلی است که به‌صورت کامل روی **Cloudflare Workers** و پایگاه‌داده **Cloudflare D1** اجرا می‌شود.
 
-برای اجرای این پروژه هیچ نیازی به موارد زیر ندارید:
+این پروژه بدون نیاز به زیرساخت‌های پیچیده طراحی شده است و برای اجرا به موارد زیر احتیاج ندارد:
 
 * ❌ سرور اختصاصی (VPS)
 * ❌ هاست یا دامنه
-* ❌ کتابخانه‌های خارجی (npm Package)
-* ❌ ابزار خط فرمان مانند Wrangler CLI
+* ❌ نصب کتابخانه‌های خارجی
+* ❌ ابزارهای خط فرمان مانند Wrangler CLI
 
-تمام پروژه تنها در **یک فایل JavaScript** نوشته شده و مستقیماً از طریق ویرایشگر آنلاین Cloudflare قابل ویرایش، استقرار (Deploy) و مدیریت است.
+تمام منطق برنامه در یک فایل JavaScript قرار دارد و مستقیماً از طریق ویرایشگر آنلاین Cloudflare قابل ویرایش، انتشار و مدیریت است.
 
-این ربات به‌عنوان یک **دروازه (Gateway) یا پروکسی هوشمند** بین کاربران تلگرام و سرویس‌های مختلف هوش مصنوعی عمل می‌کند و علاوه بر مدیریت مدل‌ها و Providerها، یک پنل مدیریتی کامل را نیز مستقیماً داخل تلگرام در اختیار مدیر قرار می‌دهد.
+این ربات به‌عنوان یک **دروازه هوشمند (Gateway)** میان کاربران تلگرام و سرویس‌های هوش مصنوعی مختلف عمل می‌کند.
+
+سیستم علاوه بر مدیریت مدل‌ها و سرویس‌دهنده‌ها، دارای یک پنل مدیریتی کامل داخل تلگرام است که کنترل کامل ربات را در اختیار مدیر قرار می‌دهد.
 
 ---
 
-# ✨ امکانات
+# ✨ امکانات پروژه
 
 ## 👤 امکانات کاربران
 
-* 💬 گفت‌وگوی هوشمند با حافظه مکالمه (Context Memory تا ۵ پیام اخیر)
-* 🖼️ تحلیل و پردازش تصاویر (Vision) توسط مدل‌های چندوجهی
-* 🎭 انتخاب شخصیت (Persona) برای تغییر رفتار هوش مصنوعی
-* 🧹 پاک‌سازی حافظه گفتگو و شروع یک مکالمه جدید
-* 👤 مشاهده پروفایل، مدل فعال و اعتبار باقی‌مانده
-* ⏳ نمایش وضعیت پردازش پیام به‌صورت Fake Streaming
-* 🎨 قالب‌بندی ایمن خروجی با HTML Sanitizer اختصاصی
+* 💬 گفت‌وگوی هوشمند با حافظه مکالمه (۵ پیام اخیر)
+* 🖼️ تحلیل و پردازش تصاویر با مدل‌های چندوجهی
+* 🎭 انتخاب شخصیت هوش مصنوعی برای تغییر سبک پاسخ‌دهی
+* 🧹 پاک‌سازی حافظه گفتگو و شروع مکالمه جدید
+* 👤 مشاهده اطلاعات حساب، مدل فعال و اعتبار باقی‌مانده
+* ⏳ نمایش وضعیت پردازش پیام به‌صورت شبیه‌سازی استریم
+* 🎨 نمایش خروجی با قالب‌بندی امن HTML
 
 ---
 
-## 👑 امکانات مدیر
+## 👑 امکانات مدیریتی
 
-* 📊 داشبورد زنده آمار کاربران و وضعیت ربات
-* 🔌 مدیریت نامحدود Providerهای هوش مصنوعی
-* ➕ افزودن، حذف، ویرایش و فعال‌سازی Providerها
-* 🔄 دریافت خودکار لیست مدل‌های هر Provider
-* 🤖 انتخاب مدل پیش‌فرض با صفحه‌بندی
+* 📊 داشبورد زنده آمار کاربران و وضعیت سیستم
+* 🔌 مدیریت نامحدود سرویس‌دهنده‌های هوش مصنوعی
+* ➕ افزودن، حذف، ویرایش و فعال‌سازی سرویس‌دهنده‌ها
+* 🔄 دریافت خودکار فهرست مدل‌های هر سرویس‌دهنده
+* 🤖 انتخاب مدل پیش‌فرض با سیستم صفحه‌بندی
 * 👥 مدیریت کامل کاربران
-* 🚫 مسدودسازی و آزادسازی کاربران
+* 🚫 مسدودسازی و فعال‌سازی مجدد کاربران
 * 💎 افزایش یا کاهش اعتبار کاربران
 * 🎯 اختصاص مدل اختصاصی برای هر کاربر
 * 🎭 ساخت و مدیریت شخصیت‌های سفارشی
-* 📢 ارسال پیام همگانی (Broadcast)
-* 🔒 تغییر لحظه‌ای وضعیت ربات بین حالت عمومی و خصوصی
-* 🔔 دریافت اعلان عضویت کاربران جدید
+* 📢 ارسال پیام همگانی
+* 🔒 تغییر وضعیت ربات بین حالت عمومی و خصوصی
+* 🔔 دریافت اعلان ورود کاربران جدید
 
 ---
 
-## ⚙️ ویژگی‌های فنی
+# ⚙️ ویژگی‌های فنی
 
 * ✅ پشتیبانی از تمام APIهای سازگار با OpenAI
 * ✅ پشتیبانی اختصاصی از Google Gemini API
-* ✅ تشخیص خودکار نوع Provider
-* ✅ مدیریت خودکار محدودیت ارسال پیام تلگرام (Rate Limit - Error 429)
+* ✅ تشخیص خودکار نوع سرویس‌دهنده هوش مصنوعی
+* ✅ مدیریت محدودیت ارسال پیام تلگرام و خطای 429
 * ✅ جلوگیری از Timeout با استفاده از `ctx.waitUntil()`
-* ✅ HTML Sanitizer اختصاصی برای جلوگیری از خطاهای قالب‌بندی
-* ✅ اجرای کاملاً Serverless
+* ✅ پاک‌سازی امن خروجی HTML
+* ✅ اجرای کامل به‌صورت Serverless
 * ✅ بدون وابستگی به کتابخانه‌های خارجی
-* ✅ قابل اجرا روی پلن رایگان Cloudflare (تا ۱۰۰٬۰۰۰ درخواست در روز)
+* ✅ قابل اجرا روی پلن رایگان Cloudflare
 
 ---
 
 # 🏗 معماری سیستم
 
+<div dir="ltr">
+
 ```text
-┌─────────────┐      Webhook       ┌──────────────────────┐
-│   Telegram  │ ─────────────────> │  Cloudflare Worker   │
-│     User    │ <───────────────── │     (worker.js)      │
-└─────────────┘    AI Response      └──────────┬───────────┘
-                                               │
-                    ┌──────────────────────────┼──────────────────────────┐
-                    │                          │                          │
-              ┌─────▼─────┐             ┌──────▼──────┐            ┌──────▼──────┐
-              │ D1 Database│             │ AI Provider │            │ Telegram API│
-              │  SQLite    │             │ Groq/Gemini │            │              │
-              └────────────┘             │ OpenRouter  │            └──────────────┘
-                                         │ DeepSeek    │
-                                         └─────────────┘
-```
+                 Telegram Users
+                      │
+                      │ Webhook
+                      ▼
+          ┌────────────────────────┐
+          │   Cloudflare Worker    │
+          │      worker.js         │
+          └───────────┬────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+        ▼             ▼             ▼
+
+ ┌────────────┐ ┌─────────────┐ ┌──────────────┐
+ │ Cloudflare │ │ AI Providers│ │ Telegram API │
+ │    D1      │ │             │ │              │
+ │ Database   │ │ Gemini      │ │ Messages     │
+ │ SQLite     │ │ Groq        │ │ Management   │
+ └────────────┘ │ OpenRouter  │ └──────────────┘
+                │ DeepSeek    │
+                └─────────────┘
+````
+
+</div>
 
 ---
 
 # 🛠 پیش‌نیازها
 
-قبل از شروع، موارد زیر را (همگی رایگان) آماده کنید.
+قبل از نصب، موارد زیر را آماده کنید:
 
 ## حساب‌های موردنیاز
 
-| مورد        | لینک                                | توضیح                    |
-| ----------- | ----------------------------------- | ------------------------ |
-| GitHub      | https://github.com/join             | نگهداری سورس پروژه       |
-| Cloudflare  | https://dash.cloudflare.com/sign-up | اجرای Cloudflare Workers |
-| BotFather   | https://t.me/BotFather              | دریافت توکن ربات         |
-| UserInfoBot | https://t.me/userinfobot            | دریافت شناسه عددی مدیر   |
+| سرویس       | لینک                                                                       | کاربرد             |
+| ----------- | -------------------------------------------------------------------------- | ------------------ |
+| GitHub      | [https://github.com/join](https://github.com/join)                         | نگهداری سورس پروژه |
+| Cloudflare  | [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) | اجرای Worker       |
+| BotFather   | [https://t.me/BotFather](https://t.me/BotFather)                           | ساخت ربات تلگرام   |
+| UserInfoBot | [https://t.me/userinfobot](https://t.me/userinfobot)                       | دریافت شناسه مدیر  |
 
 ---
 
-## Providerهای هوش مصنوعی
+# 🤖 سرویس‌دهنده‌های هوش مصنوعی
 
-| Provider   | دریافت API Key                              | Base URL                                    | توضیح                    |
-| ---------- | ------------------------------------------- | ------------------------------------------- | ------------------------ |
-| Gemini     | https://aistudio.google.com/apikey          | `https://generativelanguage.googleapis.com` | گوگل                     |
-| Groq       | https://console.groq.com/keys               | `https://api.groq.com/openai/v1`            | رایگان و بسیار سریع      |
-| Mistral AI | https://console.mistral.ai/api-keys         | `https://api.mistral.ai/v1`                 | مدل‌های فرانسوی          |
-| OpenRouter | https://openrouter.ai/keys                  | `https://openrouter.ai/api/v1`              | دسترسی به صدها مدل       |
-| Cerebras   | https://cloud.cerebras.ai/platform/api-keys | `https://api.cerebras.ai/v1`                | پردازش بسیار سریع        |
-| OpenModel  | https://platform.openmodel.ai/api-keys      | `https://api.openmodel.ai/v1`               | مدل‌های متن‌باز          |
-| Cohere     | https://dashboard.cohere.com/api-keys       | `https://api.cohere.com/v2`                 | Chat و Embedding         |
-| DeepSeek   | https://platform.deepseek.com/api_keys      | `https://api.deepseek.com`                  | مدل‌های هوش مصنوعی چینی  |
-| OpenAI     | https://platform.openai.com/api-keys        | `https://api.openai.com/v1`                 | ChatGPT و مدل‌های OpenAI |
+| سرویس‌دهنده | دریافت API Key                                                                             | Base URL                                    | توضیح                    |
+| ----------- | ------------------------------------------------------------------------------------------ | ------------------------------------------- | ------------------------ |
+| Gemini      | [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)                   | `https://generativelanguage.googleapis.com` | مدل‌های گوگل             |
+| Groq        | [https://console.groq.com/keys](https://console.groq.com/keys)                             | `https://api.groq.com/openai/v1`            | سریع و رایگان            |
+| Mistral AI  | [https://console.mistral.ai/api-keys](https://console.mistral.ai/api-keys)                 | `https://api.mistral.ai/v1`                 | مدل‌های فرانسوی          |
+| OpenRouter  | [https://openrouter.ai/keys](https://openrouter.ai/keys)                                   | `https://openrouter.ai/api/v1`              | دسترسی به مدل‌های متعدد  |
+| Cerebras    | [https://cloud.cerebras.ai/platform/api-keys](https://cloud.cerebras.ai/platform/api-keys) | `https://api.cerebras.ai/v1`                | پردازش فوق سریع          |
+| OpenModel   | [https://platform.openmodel.ai/api-keys](https://platform.openmodel.ai/api-keys)           | `https://api.openmodel.ai/v1`               | مدل‌های متن‌باز          |
+| Cohere      | [https://dashboard.cohere.com/api-keys](https://dashboard.cohere.com/api-keys)             | `https://api.cohere.com/v2`                 | گفتگو و Embedding        |
+| DeepSeek    | [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)           | `https://api.deepseek.com`                  | مدل‌های چینی             |
+| OpenAI      | [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)               | `https://api.openai.com/v1`                 | ChatGPT و مدل‌های OpenAI |
 
 ---
 
@@ -129,21 +146,36 @@
 
 2️⃣ یک Cloudflare Worker جدید ایجاد کنید.
 
-3️⃣ سورس پروژه را داخل Worker جای‌گذاری کنید.
+3️⃣ سورس پروژه را داخل Worker قرار دهید.
 
-4️⃣ یک پایگاه‌داده D1 ایجاد کرده و با نام DB به Worker متصل کنید.
+4️⃣ یک پایگاه‌داده Cloudflare D1 ایجاد کنید و آن را با نام DB متصل کنید.
 
-5️⃣ متغیرهای BOT_TOKEN و ADMIN_ID را از مسیر:
+5️⃣ متغیرهای زیر را از مسیر:
+
 Settings → Variables
-تنظیم کنید.
+
+تنظیم کنید:
+
+BOT_TOKEN
+ADMIN_ID
 
 6️⃣ روی Deploy کلیک کنید.
 
-7️⃣ مرورگر را باز کرده و آدرس زیر را اجرا کنید:
+7️⃣ آدرس زیر را در مرورگر باز کنید:
 
 https://YOUR-WORKER.workers.dev/setup?key=YOUR_ADMIN_ID
 
-8️⃣ در تلگرام ربات را باز کرده و دستور /start را ارسال کنید. 🎉
+8️⃣ ربات را در تلگرام باز کنید و دستور /start را ارسال کنید.
+
+🎉 ربات آماده استفاده است.
 ```
+
+---
+
+# 📌 نکات مهم
+
+* تمام اطلاعات حساس مانند توکن ربات و کلیدهای API باید فقط در Variables ذخیره شوند.
+* این پروژه بدون نیاز به سرور خارجی اجرا می‌شود.
+* معماری Serverless باعث کاهش هزینه و افزایش مقیاس‌پذیری می‌شود.
 
 </div>
