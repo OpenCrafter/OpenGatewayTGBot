@@ -163,7 +163,7 @@ ADMIN_ID
 
 7️⃣ آدرس زیر را در مرورگر باز کنید:
 
-https://YOUR-WORKER.workers.dev/setup?key=YOUR_ADMIN_ID
+https://YOUR-WORKER.workers.dev/setup?key=ADMIN_ID
 
 8️⃣ ربات را در تلگرام باز کنید و دستور /start را ارسال کنید.
 
