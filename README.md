@@ -1,186 +1,192 @@
+<div align="center">
 
-<div dir="rtl">
+# 🤖 AI Gateway Bot
 
-# 🤖 ربات دروازه هوش مصنوعی سرورلس
+### Serverless AI Gateway for Telegram
 
-### دروازه هوشمند هوش مصنوعی برای تلگرام با Cloudflare Workers
+**A powerful, free Telegram bot that provides access to dozens of AI models through a unified gateway.**
 
-یک ربات تلگرام قدرتمند، سریع و کاملاً رایگان که ده‌ها مدل هوش مصنوعی را از طریق یک درگاه واحد در اختیار کاربران قرار می‌دهد.
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Platform: Cloudflare Workers](https://img.shields.io/badge/Platform-Cloudflare%20Workers-orange.svg)
+![Database: D1](https://img.shields.io/badge/Database-Cloudflare%20D1-blue.svg)
+![Version](https://img.shields.io/badge/Version-1.0.1-blue.svg)
+![Telegram Bot API](https://img.shields.io/badge/Bot%20API-Telegram-26A5E4.svg)
 
-این پروژه یک هاب هوش مصنوعی چندمدلی است که امکان اتصال هم‌زمان به سرویس‌های مختلف هوش مصنوعی، مدیریت کاربران، کنترل مدل‌ها و ایجاد تجربه‌ای هوشمند در تلگرام را فراهم می‌کند.
-
----
-
-# 📖 معرفی پروژه
-
-**ربات دروازه هوش مصنوعی سرورلس** یک ربات تلگرام تک‌فایلی است که به‌صورت کامل روی **Cloudflare Workers** و پایگاه‌داده **Cloudflare D1** اجرا می‌شود.
-
-این پروژه بدون نیاز به زیرساخت‌های پیچیده طراحی شده است و برای اجرا به موارد زیر احتیاج ندارد:
-
-* ❌ سرور اختصاصی (VPS)
-* ❌ هاست یا دامنه
-* ❌ نصب کتابخانه‌های خارجی
-* ❌ ابزارهای خط فرمان مانند Wrangler CLI
-
-تمام منطق برنامه در یک فایل JavaScript قرار دارد و مستقیماً از طریق ویرایشگر آنلاین Cloudflare قابل ویرایش، انتشار و مدیریت است.
-
-این ربات به‌عنوان یک **دروازه هوشمند (Gateway)** میان کاربران تلگرام و سرویس‌های هوش مصنوعی مختلف عمل می‌کند.
-
-سیستم علاوه بر مدیریت مدل‌ها و سرویس‌دهنده‌ها، دارای یک پنل مدیریتی کامل داخل تلگرام است که کنترل کامل ربات را در اختیار مدیر قرار می‌دهد.
-
----
-
-# ✨ امکانات پروژه
-
-## 👤 امکانات کاربران
-
-* 💬 گفت‌وگوی هوشمند با حافظه مکالمه (۵ پیام اخیر)
-* 🖼️ تحلیل و پردازش تصاویر با مدل‌های چندوجهی
-* 🎭 انتخاب شخصیت هوش مصنوعی برای تغییر سبک پاسخ‌دهی
-* 🧹 پاک‌سازی حافظه گفتگو و شروع مکالمه جدید
-* 👤 مشاهده اطلاعات حساب، مدل فعال و اعتبار باقی‌مانده
-* ⏳ نمایش وضعیت پردازش پیام به‌صورت شبیه‌سازی استریم
-* 🎨 نمایش خروجی با قالب‌بندی امن HTML
-
----
-
-## 👑 امکانات مدیریتی
-
-* 📊 داشبورد زنده آمار کاربران و وضعیت سیستم
-* 🔌 مدیریت نامحدود سرویس‌دهنده‌های هوش مصنوعی
-* ➕ افزودن، حذف، ویرایش و فعال‌سازی سرویس‌دهنده‌ها
-* 🔄 دریافت خودکار فهرست مدل‌های هر سرویس‌دهنده
-* 🤖 انتخاب مدل پیش‌فرض با سیستم صفحه‌بندی
-* 👥 مدیریت کامل کاربران
-* 🚫 مسدودسازی و فعال‌سازی مجدد کاربران
-* 💎 افزایش یا کاهش اعتبار کاربران
-* 🎯 اختصاص مدل اختصاصی برای هر کاربر
-* 🎭 ساخت و مدیریت شخصیت‌های سفارشی
-* 📢 ارسال پیام همگانی
-* 🔒 تغییر وضعیت ربات بین حالت عمومی و خصوصی
-* 🔔 دریافت اعلان ورود کاربران جدید
-
----
-
-# ⚙️ ویژگی‌های فنی
-
-* ✅ پشتیبانی از تمام APIهای سازگار با OpenAI
-* ✅ پشتیبانی اختصاصی از Google Gemini API
-* ✅ تشخیص خودکار نوع سرویس‌دهنده هوش مصنوعی
-* ✅ مدیریت محدودیت ارسال پیام تلگرام و خطای 429
-* ✅ جلوگیری از Timeout با استفاده از `ctx.waitUntil()`
-* ✅ پاک‌سازی امن خروجی HTML
-* ✅ اجرای کامل به‌صورت Serverless
-* ✅ بدون وابستگی به کتابخانه‌های خارجی
-* ✅ قابل اجرا روی پلن رایگان Cloudflare
-
----
-
-# 🏗 معماری سیستم
-
-<div dir="ltr">
-
-```text
-                 Telegram Users
-                      │
-                      │ Webhook
-                      ▼
-          ┌────────────────────────┐
-          │   Cloudflare Worker    │
-          │      worker.js         │
-          └───────────┬────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        │             │             │
-        ▼             ▼             ▼
-
- ┌────────────┐ ┌─────────────┐ ┌──────────────┐
- │ Cloudflare │ │ AI Providers│ │ Telegram API │
- │    D1      │ │             │ │              │
- │ Database   │ │ Gemini      │ │ Messages     │
- │ SQLite     │ │ Groq        │ │ Management   │
- └────────────┘ │ OpenRouter  │ └──────────────┘
-                │ DeepSeek    │
-                └─────────────┘
-````
+[🇷🇺 فارسی](#-معرفی-پروژه) | [🇺🇸 English](#-introduction)
 
 </div>
 
 ---
 
-# 🛠 پیش‌نیازها
+## 🇬🇧 Introduction
 
-قبل از نصب، موارد زیر را آماده کنید:
+**AI Gateway Bot** is a single-file, serverless Telegram bot that runs entirely on **Cloudflare Workers** with **Cloudflare D1** database.
 
-## حساب‌های موردنیاز
+It acts as a **smart gateway** between Telegram users and multiple AI providers, featuring a complete admin panel built right into Telegram.
 
-| سرویس       | لینک                                                                       | کاربرد             |
-| ----------- | -------------------------------------------------------------------------- | ------------------ |
-| GitHub      | [https://github.com/join](https://github.com/join)                         | نگهداری سورس پروژه |
-| Cloudflare  | [https://dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) | اجرای Worker       |
-| BotFather   | [https://t.me/BotFather](https://t.me/BotFather)                           | ساخت ربات تلگرام   |
-| UserInfoBot | [https://t.me/userinfobot](https://t.me/userinfobot)                       | دریافت شناسه مدیر  |
+### Why Use It?
 
----
-
-# 🤖 سرویس‌دهنده‌های هوش مصنوعی
-
-| سرویس‌دهنده | دریافت API Key                                                                             | Base URL                                    | توضیح                    |
-| ----------- | ------------------------------------------------------------------------------------------ | ------------------------------------------- | ------------------------ |
-| Gemini      | [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)                   | `https://generativelanguage.googleapis.com` | مدل‌های گوگل             |
-| Groq        | [https://console.groq.com/keys](https://console.groq.com/keys)                             | `https://api.groq.com/openai/v1`            | سریع و رایگان            |
-| Mistral AI  | [https://console.mistral.ai/api-keys](https://console.mistral.ai/api-keys)                 | `https://api.mistral.ai/v1`                 | مدل‌های فرانسوی          |
-| OpenRouter  | [https://openrouter.ai/keys](https://openrouter.ai/keys)                                   | `https://openrouter.ai/api/v1`              | دسترسی به مدل‌های متعدد  |
-| Cerebras    | [https://cloud.cerebras.ai/platform/api-keys](https://cloud.cerebras.ai/platform/api-keys) | `https://api.cerebras.ai/v1`                | پردازش فوق سریع          |
-| OpenModel   | [https://platform.openmodel.ai/api-keys](https://platform.openmodel.ai/api-keys)           | `https://api.openmodel.ai/v1`               | مدل‌های متن‌باز          |
-| Cohere      | [https://dashboard.cohere.com/api-keys](https://dashboard.cohere.com/api-keys)             | `https://api.cohere.com/v2`                 | گفتگو و Embedding        |
-| DeepSeek    | [https://platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys)           | `https://api.deepseek.com`                  | مدل‌های چینی             |
-| OpenAI      | [https://platform.openai.com/api-keys](https://platform.openai.com/api-keys)               | `https://api.openai.com/v1`                 | ChatGPT و مدل‌های OpenAI |
+- ❌ No VPS or hosting required
+- ❌ No external dependencies or CLI tools
+- ❌ No domain needed
+- ✅ Runs on Cloudflare's **free tier**
+- ✅ Single `worker.js` file — edit in Cloudflare dashboard
+- ✅ Supports 9+ AI providers out of the box
+- ✅ Full admin panel inside Telegram
 
 ---
 
-# 🚀 نصب سریع
+## ✨ Features
 
-```text
-1️⃣ فایل worker.js را دانلود کنید.
+### 👤 User Features
 
-2️⃣ یک Worker جدید ایجاد کنید.
+| Feature | Description |
+|---------|-------------|
+| 💬 Smart Chat | Conversation with memory (last 10 messages) |
+| 🖼️ Image Analysis | Send photos for AI-powered vision |
+| 🎭 Custom Personas | Choose AI personality for different styles |
+| 🧹 Clear Memory | Start fresh conversations anytime |
+| 👤 Profile | View account info, active model & credits |
+| ⏳ Progress Bar | Visual processing indicator |
 
-3️⃣ سورس پروژه را داخل Worker قرار دهید.
+### 👑 Admin Features
 
-4️⃣ یک پایگاه‌داده D1 ایجاد کنید و آن را با نام DB متصل کنید.
+| Feature | Description |
+|---------|-------------|
+| 📊 Dashboard | Live stats — users, messages, status |
+| 🔌 Provider Management | Add/edit/remove AI providers unlimited |
+| 📦 Auto Model Fetch | Automatically fetch available models |
+| 🤖 Default Model | Set global default with pagination |
+| 👥 User Management | Ban/unban, credits, custom models |
+| 🎭 Persona Management | Create & manage custom AI personalities |
+| 📢 Broadcast | Send messages to all users |
+| 🔒 Private Mode | Toggle public/private bot access |
+| 🔔 Notifications | Get alerted when new users join |
 
-5️⃣ متغیرهای زیر را از مسیر:
+---
 
-Settings → Variables
+## ⚙️ Technical Highlights
 
-تنظیم کنید:
+- ✅ Supports **all OpenAI-compatible APIs**
+- ✅ Dedicated **Google Gemini** support
+- ✅ Auto-detect provider type
+- ✅ Telegram rate limit (429) handling
+- ✅ Timeout prevention with `ctx.waitUntil()`
+- ✅ Safe HTML sanitization
+- ✅ Zero external dependencies
+- ✅ Runs on Cloudflare free plan
 
-BOT_TOKEN
-ADMIN_ID
+---
 
-6️⃣ روی Deploy کلیک کنید.
+## 🏗 Architecture
 
-7️⃣ آدرس زیر را در مرورگر باز کنید:
+```
+              Telegram Users
+                   │
+                   │ Webhook
+                   ▼
+       ┌────────────────────┐
+       │   Cloudflare Worker │
+       │      worker.js      │
+       └─────────┬──────────┘
+                 │
+     ┌───────────┼───────────┐
+     │           │           │
+     ▼           ▼           ▼
 
-https://YOUR-WORKER.workers.dev/setup?key=ADMIN_ID
-
-8️⃣ ربات را در تلگرام باز کنید و دستور /start را ارسال کنید.
-
-9️⃣اولین قدم بعد از راه‌اندازی:
-به ربات /admin بزنید : مدیریت پروایدرها : افزودن پروایدر جدید
-یک پروایدر مثل Groq اضافه کنید از بخش سرویس‌دهنده‌های هوش مصنوعی (در بالا☝️) 
-🤖 انتخاب مدل پیش‌فرض یک مدل را انتخاب کنید تا ربات آماده‌ی پاسخگویی شود.
-
-🎉 ربات آماده استفاده است.
+┌──────────┐ ┌──────────┐ ┌────────────┐
+│Cloudflare│ │AI Provider│ │ Telegram   │
+│   D1     │ │           │ │   API      │
+│ Database │ │ Gemini    │ │ Messages   │
+│ SQLite   │ │ Groq      │ │ Management │
+└──────────┘ │ OpenRouter│ └────────────┘
+             │ DeepSeek  │
+             │ ...       │
+             └──────────┘
 ```
 
 ---
 
-# 📌 نکات مهم
+## 🛠 Prerequisites
 
-* تمام اطلاعات حساس مانند توکن ربات و کلیدهای API باید فقط در Variables ذخیره شوند.
-* این پروژه بدون نیاز به سرور خارجی اجرا می‌شود.
-* معماری Serverless باعث کاهش هزینه و افزایش مقیاس‌پذیری می‌شود.
+### Accounts Needed
+
+| Service | Link | Purpose |
+|---------|------|---------|
+| GitHub | [github.com/join](https://github.com/join) | Source code hosting |
+| Cloudflare | [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) | Worker hosting |
+| BotFather | [t.me/BotFather](https://t.me/BotFather) | Create Telegram bot |
+| UserInfoBot | [t.me/userinfobot](https://t.me/userinfobot) | Get admin chat ID |
+
+### Supported AI Providers
+
+| Provider | API Key | Base URL | Notes |
+|----------|---------|----------|-------|
+| Gemini | [Get Key](https://aistudio.google.com/apikey) | `https://generativelanguage.googleapis.com` | Google models |
+| Groq | [Get Key](https://console.groq.com/keys) | `https://api.groq.com/openai/v1` | Fast & free |
+| Mistral AI | [Get Key](https://console.mistral.ai/api-keys) | `https://api.mistral.ai/v1` | French models |
+| OpenRouter | [Get Key](https://openrouter.ai/keys) | `https://openrouter.ai/api/v1` | Multi-model access |
+| Cerebras | [Get Key](https://cloud.cerebras.ai/platform/api-keys) | `https://api.cerebras.ai/v1` | Ultra-fast inference |
+| OpenModel | [Get Key](https://platform.openmodel.ai/api-keys) | `https://api.openmodel.ai/v1` | Open-source models |
+| Cohere | [Get Key](https://dashboard.cohere.com/api-keys) | `https://api.cohere.com/v2` | Chat & Embedding |
+| DeepSeek | [Get Key](https://platform.deepseek.com/api_keys) | `https://api.deepseek.com` | Chinese models |
+| OpenAI | [Get Key](https://platform.openai.com/api-keys) | `https://api.openai.com/v1` | ChatGPT models |
+
+---
+
+## 🚀 Quick Start
+
+```
+1️⃣ Download worker.js
+
+2️⃣ Create a new Worker in Cloudflare Dashboard
+
+3️⃣ Paste the code into the Worker editor
+
+4️⃣ Create a D1 database and bind it as "DB"
+
+5️⃣ Set environment variables:
+   BOT_TOKEN = your Telegram bot token
+   ADMIN_ID  = your Telegram user ID
+
+6️⃣ Click Deploy
+
+7️⃣ Open in browser:
+   https://YOUR-WORKER.workers.dev/setup?key=ADMIN_ID
+
+8️⃣ Open your bot in Telegram and send /start
+
+9️⃣ First steps after setup:
+   → Send /admin
+   → "Provider Management" → "Add New Provider"
+   → Add a provider (e.g., Groq)
+   → "Select Default Model" → Pick a model
+   → 🎉 Bot is ready!
+```
+
+---
+
+## 📌 Important Notes
+
+- 🔐 Store sensitive data (bot token, API keys) **only** in Cloudflare Variables
+- 💰 This project runs on Cloudflare's **free tier**
+- 📈 Serverless architecture ensures **scalability** and **zero maintenance**
+- 🔄 Daily credit reset via Cloudflare Cron Triggers
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues and pull requests.
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Siko TMT](https://t.me/SikoTMT)**
 
 </div>
