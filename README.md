@@ -18,7 +18,9 @@
 
 ---
 
-## 🇮🇷 معرفی پروژه {#فارسی}
+<a id="فارسی"></a>
+
+## 🇮🇷 معرفی پروژه
 
 **ربات دروازه هوش مصنوعی سرورلس** یک ربات تلگرام **تک‌فایلی** است که به‌صورت کامل روی **Cloudflare Workers** و پایگاه‌داده **Cloudflare D1 (SQLite)** اجرا می‌شود.
 
@@ -343,7 +345,9 @@ admin_states (chat_id PK, state, temp_data)
 
 ---
 
-## 🇬🇧 Introduction {#english}
+<a id="english"></a>
+
+## 🇬🇧 Introduction
 
 **AI Gateway Bot** is a **single-file**, serverless Telegram bot that runs entirely on **Cloudflare Workers** with **Cloudflare D1 (SQLite)** database.
 
