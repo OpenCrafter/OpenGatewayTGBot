@@ -1,38 +1,8 @@
 
-/*
-══════════════════════════════════════════════════════════════════════════════════
-
-   ███████╗██╗██╗  ██╗ ██████╗      ████████╗███╗   ███╗████████╗
-   ██╔════╝██║██║ ██╔╝██╔═══██╗     ╚══██╔══╝████╗ ████║╚══██╔══╝
-   ███████╗██║█████╔╝ ██║   ██║        ██║   ██╔████╔██║   ██║
-   ╚════██║██║██╔═██╗ ██║   ██║        ██║   ██║╚██╔╝██║   ██║
-   ███████║██║██║  ██╗╚██████╔╝        ██║   ██║ ╚═╝ ██║   ██║
-   ╚══════╝╚═╝╚═╝  ╚═╝ ╚═════╝         ╚═╝   ╚═╝     ╚═╝   ╚═╝
-
-══════════════════════════════════════════════════════════════════════════════════
-
-    🔴 Telegram   : https://t.me/Siko_TMT
-    🔵 X Page     : https://x.com/Siko_Tmt
-    👨‍💻 Contact   : https://t.me/SikoTMT
-
-══════════════════════════════════════════════════════════════════════════════════
-*/
-
-/**
- * Sleep for a given number of milliseconds.
- * Used for retry delays and rate limiting.
- * @param {number} ms - Milliseconds to sleep
- * @returns {Promise<void>}
- */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Escape HTML special characters to prevent XSS attacks.
- * @param {string} s - Raw string to escape
- * @returns {string} HTML-safe string
- */
 function escapeHtml(s = '') {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -40,12 +10,6 @@ function escapeHtml(s = '') {
     .replace(/>/g, '&gt;');
 }
 
-/**
- * Convert an ArrayBuffer to a base64-encoded string.
- * Used for encoding images for AI vision APIs.
- * @param {ArrayBuffer} buffer - Binary data buffer
- * @returns {string} Base64-encoded string
- */
 function arrayBufferToBase64(buffer) {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -57,14 +21,7 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-/**
- * Execute a SQL statement that doesn't return data (INSERT/UPDATE/DELETE).
- * @param {Object} env - Cloudflare Worker environment bindings
- * @param {string} sql - SQL statement with ? placeholders
- * @param {Array} params - Bound parameters
- * @returns {Promise<Object>} D1 run result
- */
-async function dbRun, params = []) {
+async function dbRun(env, sql, params = []) {
   try {
     const stmt = env.DB.prepare(sql).bind(...params);
     return await stmt.run();
@@ -74,14 +31,7 @@ async function dbRun, params = []) {
   }
 }
 
-/**
- * Fetch a single row from D1 database.
- * @param {Object} env - Cloudflare Worker environment bindings
- * @param {string} sql - SQL query with ? placeholders
- * @param {Array} params - Bound parameters
- * @returns {Promise<Object|null>} First matching row or null
- */
-async function dbFirst, params = []) {
+async function dbFirst(env, sql, params = []) {
   try {
     const stmt = env.DB.prepare(sql).bind(...params);
     return await stmt.first();
@@ -91,14 +41,7 @@ async function dbFirst, params = []) {
   }
 }
 
-/**
- * Fetch all matching rows from D1 database.
- * @param {Object} env - Cloudflare Worker environment bindings
- * @param {string} sql - SQL query with ? placeholders
- * @param {Array} params - Bound parameters
- * @returns {Promise<Array>} Array of matching rows
- */
-async function dbAll, params = []) {
+async function dbAll(env, sql, params = []) {
   try {
     const stmt = env.DB.prepare(sql).bind(...params);
     const res = await stmt.all();
@@ -121,12 +64,6 @@ async function bulkInsertModels(env, providerId, modelNames) {
   }
 }
 
-/**
- * Initialize database schema — creates all tables if they don't exist.
- * Includes: users, chat_memory, providers, models, personas, bot_settings, admin_states.
- * @param {Object} env - Cloudflare Worker environment bindings
- * @returns {Promise<void>}
- */
 async function ensureSchema(env) {
   const statements = [
     `CREATE TABLE IF NOT EXISTS users (
@@ -209,14 +146,7 @@ async function clearState(env, chatId) {
   await dbRun(env, `DELETE FROM admin_states WHERE chat_id = ?`, [chatId]);
 }
 
-/**
- * Make a Telegram Bot API call with automatic retry on 429 rate limits.
- * @param {Object} env - Cloudflare Worker environment bindings
- * @param {string} method - Telegram Bot API method (e.g., 'sendMessage')
- * @param {Object} payload - Request body payload
- * @returns {Promise<Object>} Telegram API response
- */
-async function tgCall, payload) {
+async function tgCall(env, method, payload) {
   const url = `https://api.telegram.org/bot${env.BOT_TOKEN}/${method}`;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -245,15 +175,7 @@ async function tgCall, payload) {
   return { ok: false, error: 'max retries exceeded' };
 }
 
-/**
- * Send an HTML-formatted message to a Telegram chat.
- * @param {Object} env - Worker environment
- * @param {number|string} chatId - Telegram chat ID
- * @param {string} text - Message text (HTML allowed)
- * @param {Object} extra - Additional Telegram API parameters
- * @returns {Promise<Object>} Telegram API response
- */
-async function sendMessage, extra = {}) {
+async function sendMessage(env, chatId, text, extra = {}) {
   return tgCall(env, 'sendMessage', {
     chat_id: chatId,
     text,
@@ -434,11 +356,6 @@ async function clearMemory(env, chatId) {
   await dbRun(env, `DELETE FROM chat_memory WHERE chat_id = ?`, [chatId]);
 }
 
-/**
- * Detect AI provider type from Base URL.
- * @param {string} baseUrl - Provider Base URL
- * @returns {string} Provider type: 'gemini' or 'openai' (default)
- */
 function detectProviderType(baseUrl) {
   if (!baseUrl) return 'openai';
   if (baseUrl.includes('generativelanguage.googleapis.com')) return 'gemini';
@@ -538,18 +455,6 @@ async function callGemini({ baseUrl, apiKey, model, systemPrompt, history, userT
   return content;
 }
 
-/**
- * Universal AI call router — dispatches to the correct provider handler.
- * @param {Object} params - Call parameters
- * @param {Object} params.provider - Provider record from D1
- * @param {string} params.model - Model name
- * @param {string} params.systemPrompt - System prompt
- * @param {Array} params.history - Chat history [{role, content}]
- * @param {string} params.userText - User's message
- * @param {string|null} params.imageBase64 - Base64 image (optional)
- * @param {string} params.imageMime - Image MIME type
- * @returns {Promise<string>} AI response text
- */
 async function callAiUniversal({ provider, model, systemPrompt, history, userText, imageBase64, imageMime }) {
   const type = provider.type || detectProviderType(provider.base_url);
   if (type === 'gemini') {
@@ -658,15 +563,6 @@ async function getUserPersonaPrompt(env, user) {
   return persona ? persona.prompt_text : null;
 }
 
-/**
- * Core message processing pipeline.
- * Handles: user validation, AI call, response formatting, memory storage.
- * @param {Object} env - Worker environment
- * @param {number|string} chatId - User's Telegram chat ID
- * @param {string} userText - User's message text
- * @param {Object|null} imageInfo - Photo info {file_id} if image attached
- * @returns {Promise<void>}
- */
 async function processChatMessage(env, chatId, userText, imageInfo = null) {
   let streamer = null;
   let progressMsgId = null;
@@ -1436,10 +1332,6 @@ async function handleWebhook(env, ctx, request) {
   }
 }
 
-/**
- * Cloudflare Worker entry point.
- * Routes: /setup (initial setup), /webhook (Telegram updates), /* (info page)
- */
 export default {
   async fetch(request, env, ctx) {
     try {
