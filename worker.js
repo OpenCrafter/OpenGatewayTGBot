@@ -215,7 +215,23 @@ async function ensureSchema(env) {
       chat_id INTEGER PRIMARY KEY,
       state TEXT,
       temp_data TEXT
-    )`
+    )`,
+    `CREATE TABLE IF NOT EXISTS coding_jobs (
+      job_id TEXT PRIMARY KEY,
+      telegram_chat_id INTEGER NOT NULL,
+      repository TEXT NOT NULL,
+      task_description TEXT NOT NULL,
+      trigger_reference TEXT,
+      status TEXT NOT NULL DEFAULT 'submitted',
+      result_summary TEXT,
+      branch_url TEXT,
+      pull_request_url TEXT,
+      error_message TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_coding_jobs_chat_id ON coding_jobs(telegram_chat_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_coding_jobs_status ON coding_jobs(status)`
   ];
   for (const sql of statements) {
     await dbRun(env, sql);
@@ -739,7 +755,8 @@ async function processChatMessage(env, chatId, userText, imageInfo = null) {
         history,
         userText: userText || (imageBase64 ? 'در این عکس چه می‌بینی؟' : ''),
         imageBase64,
-        imageMime
+        imageMime,
+        env
       });
     } catch (aiError) {
       if (streamer) streamer.stop();
@@ -799,6 +816,7 @@ async function notifyAdminNewUser(env, tgUser, chatId) {
 }
 
 async function handleStart(env, chatId, user, isNew) {
+  await clearState(env, chatId);
   if (isNew) {
     await sendMessage(env, chatId, 'سایکو https://t.me/SikoTMT ربات‌های کاربردی بیشتر در کانالم هست. جویین بشید.');
     await sleep(300);
@@ -836,6 +854,442 @@ async function handlePersonaMenuForUser(env, chatId, page = 0) {
   const extra = [[{ text: '🚫 حذف شخصیت (بازگشت به حالت پیش‌فرض)', callback_data: 'persona_clear' }]];
   const kb = paginationKeyboard(items, page, 'persona', extra);
   await sendMessage(env, chatId, '🎭 یک شخصیت را برای هوش مصنوعی انتخاب کنید:', { reply_markup: kb });
+}
+
+async function handleKiloChat(env, chatId, userText) {
+  if (!isKiloConfigured(env)) {
+    await sendMessage(env, chatId, '⚠️ Kilo AI Gateway is not configured.');
+    return;
+  }
+
+  const { user } = await getOrCreateUser(env, chatId);
+  if (user.is_banned) {
+    await sendMessage(env, chatId, '🚫 You are banned by the admin.');
+    return;
+  }
+
+  const settings = await dbFirst(env, `SELECT * FROM bot_settings WHERE id = 1`);
+  const admin = await isAdmin(env, chatId);
+  if (settings && settings.is_private === 1 && !admin) {
+    await sendMessage(env, chatId, '🔒 The bot is currently private.');
+    return;
+  }
+
+  if (user.credits <= 0) {
+    await sendMessage(env, chatId, '❌ You have run out of credits. Contact the admin for more.');
+    return;
+  }
+
+  const model = getKiloChatModel(env);
+  if (!model) {
+    await sendMessage(env, chatId, '⚠️ No Kilo model configured. Please contact the admin.');
+    return;
+  }
+
+  await sendChatAction(env, chatId, 'typing');
+  const initMsg = await sendMessage(env, chatId, '⏳ Processing...');
+  let progressMsgId = null;
+  let streamer = null;
+  if (initMsg.ok) {
+    progressMsgId = initMsg.result.message_id;
+    streamer = createFakeStreamer(env, chatId, progressMsgId);
+  }
+
+  const history = await getMemory(env, chatId);
+  const personaPrompt = await getUserPersonaPrompt(env, user);
+  const systemPrompt = personaPrompt
+    ? personaPrompt
+    : 'You are a helpful and intelligent assistant. Always reply in English unless the user requests another language.';
+
+  let aiResponse;
+  try {
+    aiResponse = await callKiloGateway({
+      env,
+      model,
+      systemPrompt,
+      history,
+      userText
+    });
+  } catch (aiError) {
+    if (streamer) streamer.stop();
+    console.log('KILO CHAT FAILED:', aiError.message);
+    const errText = `❌ Error contacting AI service:\n<code>${escapeHtml(aiError.message)}</code>\n\nPlease try again later or contact the admin.`;
+    if (progressMsgId) {
+      await editMessageText(env, chatId, progressMsgId, errText);
+    } else {
+      await sendMessage(env, chatId, errText);
+    }
+    return;
+  }
+
+  if (streamer) streamer.stop();
+
+  const cleanText = sanitizeAiResponse(aiResponse);
+  const finalText = appendFooter(cleanText, model);
+
+  if (progressMsgId) {
+    const editResult = await editMessageText(env, chatId, progressMsgId, finalText, { reply_markup: mainMenuKeyboard() });
+    if (!editResult.ok) {
+      await sendLongMessage(env, chatId, finalText, { reply_markup: mainMenuKeyboard() });
+    }
+  } else {
+    await sendLongMessage(env, chatId, finalText, { reply_markup: mainMenuKeyboard() });
+  }
+
+  await addMemory(env, chatId, 'user', userText);
+  await addMemory(env, chatId, 'assistant', aiResponse);
+  await dbRun(env, `UPDATE users SET credits = credits - 1 WHERE chat_id = ?`, [chatId]);
+}
+
+// ============ Kilo Cloud Agent configuration ============
+function getCloudTriggerUrl(env) { return env.KILO_CLOUD_TRIGGER_URL || null; }
+function getCloudTriggerSecret(env) { return env.KILO_CLOUD_TRIGGER_SECRET || null; }
+function getAllowlistedRepos(env) {
+  const raw = env.KILO_CLOUD_ALLOWLISTED_REPOS || '';
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+function getAllowedTelegramIds(env) {
+  const raw = env.KILO_CLOUD_ALLOWED_TELEGRAM_IDS || '';
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+function getTriggerUrlMap(env) {
+  try {
+    const raw = env.KILO_CLOUD_TRIGGER_URLS || '';
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    return parsed;
+  } catch (_) { return {}; }
+}
+
+function generateJobId() {
+  return 'job_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+}
+
+function parseRepo(repo) {
+  if (!repo || typeof repo !== 'string') return null;
+  const trimmed = repo.trim();
+  const parts = trimmed.split('/');
+  if (parts.length !== 2) return null;
+  const [owner, name] = parts;
+  if (!owner || !name || owner.includes(' ') || name.includes(' ')) return null;
+  if (owner.length > 100 || name.length > 100) return null;
+  return { owner, name, full: `${owner}/${name}` };
+}
+
+function isRepoAllowed(env, repository) {
+  const allowlist = getAllowlistedRepos(env);
+  if (!allowlist || allowlist.length === 0) return false;
+  return allowlist.includes(repository);
+}
+
+function isCodingAllowed(env, chatId) {
+  const allowedIds = getAllowedTelegramIds(env);
+  if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(String(chatId))) return false;
+  if (String(chatId) === String(env.ADMIN_ID)) return true;
+  return true;
+}
+
+async function createCodingJob(env, job) {
+  return await dbRun(
+    env,
+    `INSERT INTO coding_jobs (job_id, telegram_chat_id, repository, task_description, trigger_reference, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    [job.jobId, job.telegramChatId, job.repository, job.taskDescription, job.triggerReference || null, job.status || 'submitted']
+  );
+}
+
+async function getCodingJob(env, jobId) {
+  return await dbFirst(env, `SELECT * FROM coding_jobs WHERE job_id = ?`, [jobId]);
+}
+
+async function updateCodingJobStatus(env, jobId, updates) {
+  const fields = [];
+  const params = [];
+  if (updates.status !== undefined) { fields.push('status = ?'); params.push(updates.status); }
+  if (updates.result_summary !== undefined) { fields.push('result_summary = ?'); params.push(updates.result_summary); }
+  if (updates.branch_url !== undefined) { fields.push('branch_url = ?'); params.push(updates.branch_url); }
+  if (updates.pull_request_url !== undefined) { fields.push('pull_request_url = ?'); params.push(updates.pull_request_url); }
+  if (updates.error_message !== undefined) { fields.push('error_message = ?'); params.push(updates.error_message); }
+  if (updates.trigger_reference !== undefined) { fields.push('trigger_reference = ?'); params.push(updates.trigger_reference); }
+  fields.push('updated_at = datetime(\'now\')');
+  params.push(jobId);
+  return await dbRun(env, `UPDATE coding_jobs SET ${fields.join(', ')} WHERE job_id = ?`, params);
+}
+
+async function listUserJobs(env, chatId, limit = 10) {
+  return await dbAll(
+    env,
+    `SELECT * FROM coding_jobs WHERE telegram_chat_id = ? ORDER BY created_at DESC LIMIT ?`,
+    [chatId, limit]
+  );
+}
+
+async function submitToKiloCloudTrigger(env, job) {
+  const triggerUrl = getCloudTriggerUrl(env);
+  if (!triggerUrl) throw new Error('❌ Kilo Cloud Agent trigger URL is not configured.');
+
+  const triggerUrlMap = getTriggerUrlMap(env);
+  let actualUrl = triggerUrl;
+  if (triggerUrlMap[job.repository]) {
+    actualUrl = triggerUrlMap[job.repository];
+  }
+
+  const secret = getCloudTriggerSecret(env);
+  const headers = {
+    'Content-Type': 'application/json'
+  };
+  if (secret) {
+    headers['X-Kilo-Trigger-Secret'] = secret;
+  }
+
+  const internalPayload = {
+    jobId: job.jobId,
+    repository: job.repository,
+    task: job.taskDescription,
+    telegramChatId: job.telegramChatId,
+    createdAt: job.createdAt || new Date().toISOString()
+  };
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  let res;
+  try {
+    res = await fetch(actualUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(internalPayload),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.text();
+      if (body) detail += ` ${body.slice(0, 200)}`;
+    } catch (_) {}
+    throw new Error(`❌ Kilo Cloud Agent trigger submission failed: ${detail}`);
+  }
+
+  return { ok: true, status: res.status };
+}
+
+const codingRateLimit = new Map();
+function checkCodingRateLimit(chatId) {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxPerWindow = 5;
+  const key = String(chatId);
+  const records = codingRateLimit.get(key) || [];
+  const recent = records.filter(t => now - t < windowMs);
+  if (recent.length >= maxPerWindow) return false;
+  recent.push(now);
+  codingRateLimit.set(key, recent);
+  return true;
+}
+
+function statusLabel(status) {
+  const labels = {
+    submitted: 'Submitted',
+    running: 'Running',
+    completed: 'Completed',
+    failed: 'Failed',
+    cancelled: 'Cancelled'
+  };
+  return labels[status] || status;
+}
+
+function getHelpText() {
+  return `
+🤖 <b>Available Commands</b>
+
+/start — Show the welcome message and features.
+/chat — Enter normal AI conversation mode (Kilo AI Gateway).
+/code owner/repository task — Submit a remote coding task.
+/status JOB_ID — Check a coding task's status.
+/jobs — List your recent coding tasks.
+/cancel JOB_ID — Cancel a task (if supported by Kilo Cloud Agent).
+/help — Show this help message.
+
+<b>Coding Task Example:</b>
+<code>/code owner/repository Fix the build failure</code>
+
+<b>Security:</b> Coding commands are restricted to authorized users and allowlisted repositories.
+`.trim();
+}
+
+async function handleCodeCommand(env, chatId, input) {
+  if (!checkCodingRateLimit(chatId)) {
+    await sendMessage(env, chatId, '⚠️ Rate limit reached for coding submissions. Please wait and try again.');
+    return;
+  }
+
+  const allowedIds = getAllowedTelegramIds(env);
+  if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(String(chatId)) && String(chatId) !== String(env.ADMIN_ID)) {
+    await sendMessage(env, chatId, '⛔️ You are not authorized to submit coding tasks.');
+    return;
+  }
+
+  if (!input) {
+    await sendMessage(env, chatId, '⚠️ Usage: /code owner/repository task\nExample: /code kilo-org/my-repo Fix the build failure');
+    return;
+  }
+
+  const spaceIdx = input.indexOf(' ');
+  if (spaceIdx === -1) {
+    await sendMessage(env, chatId, '⚠️ Usage: /code owner/repository task\nExample: /code kilo-org/my-repo Fix the build failure');
+    return;
+  }
+
+  const repo = input.slice(0, spaceIdx);
+  const task = input.slice(spaceIdx + 1).trim();
+
+  const parsed = parseRepo(repo);
+  if (!parsed) {
+    await sendMessage(env, chatId, '❌ Invalid repository format. Use owner/repository (e.g., kilo-org/my-repo).');
+    return;
+  }
+
+  if (!isRepoAllowed(env, parsed.full)) {
+    await sendMessage(env, chatId, `❌ Repository <code>${escapeHtml(parsed.full)}</code> is not in the allowlist. Contact the admin to add it.`);
+    return;
+  }
+
+  if (!task) {
+    await sendMessage(env, chatId, '⚠️ Please provide a task description.');
+    return;
+  }
+
+  const triggerUrl = getCloudTriggerUrl(env);
+  const triggerUrlMap = getTriggerUrlMap(env);
+  if (!triggerUrl && !triggerUrlMap[parsed.full]) {
+    await sendMessage(env, chatId, '⚠️ No Kilo Cloud Agent trigger is configured. Contact the admin.');
+    return;
+  }
+
+  const jobId = generateJobId();
+  const now = new Date().toISOString();
+  const job = {
+    jobId,
+    telegramChatId: chatId,
+    repository: parsed.full,
+    taskDescription: task,
+    triggerReference: null,
+    status: 'submitted',
+    createdAt: now
+  };
+
+  try {
+    await createCodingJob(env, job);
+  } catch (e) {
+    console.log('CREATE CODING JOB ERROR:', e.message);
+    await sendMessage(env, chatId, '❌ Failed to create coding task record. Please try again later.');
+    return;
+  }
+
+  const ackText =
+    `✅ <b>Coding task submitted</b>\n\n` +
+    `🆔 Job ID: <code>${jobId}</code>\n` +
+    `📦 Repository: <code>${escapeHtml(parsed.full)}</code>\n` +
+    `📝 Task: ${escapeHtml(task)}\n` +
+    `📊 Status: Submitted\n\n` +
+    `Use /status ${jobId} to check progress.`;
+
+  await sendMessage(env, chatId, ackText);
+
+  try {
+    const result = await submitToKiloCloudTrigger(env, job);
+    await updateCodingJobStatus(env, jobId, { status: 'submitted', trigger_reference: String(result.status) });
+  } catch (e) {
+    console.log('TRIGGER SUBMIT ERROR:', e.message);
+    await updateCodingJobStatus(env, jobId, { status: 'failed', error_message: e.message });
+    await sendMessage(env, chatId, `❌ Failed to submit to Kilo Cloud Agent:\n<code>${escapeHtml(e.message)}</code>\n\nYour job record was saved. Use /status ${jobId} to check.`);
+  }
+}
+
+async function handleStatusCommand(env, chatId, jobId) {
+  if (!jobId) {
+    await sendMessage(env, chatId, '⚠️ Usage: /status JOB_ID');
+    return;
+  }
+
+  const job = await getCodingJob(env, jobId);
+  if (!job) {
+    await sendMessage(env, chatId, '❌ Job not found.');
+    return;
+  }
+
+  if (String(job.telegram_chat_id) !== String(chatId) && String(chatId) !== String(env.ADMIN_ID)) {
+    await sendMessage(env, chatId, '⛔️ You do not have access to this job.');
+    return;
+  }
+
+  const lines = [
+    `📋 <b>Job Status</b>`,
+    `🆔 Job ID: <code>${job.job_id}</code>`,
+    `📦 Repository: <code>${escapeHtml(job.repository)}</code>`,
+    `📝 Task: ${escapeHtml(job.task_description)}`,
+    `📊 Status: <b>${statusLabel(job.status)}</b>`,
+    `🕒 Created: ${escapeHtml(job.created_at)}`,
+    `🕒 Updated: ${escapeHtml(job.updated_at)}`
+  ];
+
+  if (job.branch_url) lines.push(`🌿 Branch: ${escapeHtml(job.branch_url)}`);
+  if (job.pull_request_url) lines.push(`🔗 PR: ${escapeHtml(job.pull_request_url)}`);
+  if (job.result_summary) lines.push(`\n<b>Result:</b>\n${escapeHtml(job.result_summary)}`);
+  if (job.error_message) lines.push(`\n❌ Error: <code>${escapeHtml(job.error_message)}</code>`);
+
+  await sendMessage(env, chatId, lines.join('\n'));
+}
+
+async function handleJobsCommand(env, chatId) {
+  const jobs = await listUserJobs(env, chatId, 10);
+  if (!jobs.length) {
+    await sendMessage(env, chatId, '📭 No recent coding tasks found.');
+    return;
+  }
+
+  const lines = ['📋 <b>Your Recent Coding Tasks</b>\n'];
+  for (const j of jobs) {
+    lines.push(
+      `🆔 <code>${j.job_id}</code> | ${statusLabel(j.status)} | ${escapeHtml(j.repository)}\n` +
+      `   ${escapeHtml(j.task_description.slice(0, 80))}${j.task_description.length > 80 ? '…' : ''}\n` +
+      `   🕒 ${escapeHtml(j.created_at)}`
+    );
+  }
+  lines.push('\nUse /status JOB_ID for details.');
+
+  await sendMessage(env, chatId, lines.join('\n'));
+}
+
+async function handleCancelCommand(env, chatId, jobId) {
+  if (!jobId) {
+    await sendMessage(env, chatId, '⚠️ Usage: /cancel JOB_ID');
+    return;
+  }
+
+  const job = await getCodingJob(env, jobId);
+  if (!job) {
+    await sendMessage(env, chatId, '❌ Job not found.');
+    return;
+  }
+
+  if (String(job.telegram_chat_id) !== String(chatId) && String(chatId) !== String(env.ADMIN_ID)) {
+    await sendMessage(env, chatId, '⛔️ You do not have access to this job.');
+    return;
+  }
+
+  if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+    await sendMessage(env, chatId, `⚠️ Job is already ${statusLabel(job.status)}.`);
+    return;
+  }
+
+  await updateCodingJobStatus(env, jobId, { status: 'cancelled' });
+  await sendMessage(env, chatId, `✅ Job <code>${jobId}</code> marked as cancelled. Note: Kilo Cloud Agent may not support verified cancellation; the running session may continue.`);
 }
 
 async function handleIncomingMessage(env, ctx, message) {
@@ -880,6 +1334,21 @@ async function handleIncomingMessage(env, ctx, message) {
     return;
   }
 
+  if (text === '/chat') {
+    if (!isKiloConfigured(env)) {
+      await sendMessage(env, chatId, '⚠️ درگاه هوش مصنوعی Kilo تنظیم نشده است. لطفاً به ادمین اطلاع دهید.');
+      return;
+    }
+    await setState(env, chatId, 'kilo_chat', {});
+    await sendMessage(env, chatId, '💬 حالت گفتگو Kilo فعال شد. پیام خود را بنویسید. برای خروج، دستور /start را بفرستید.');
+    return;
+  }
+
+  if (state && state.state === 'kilo_chat') {
+    await handleKiloChat(env, chatId, text);
+    return;
+  }
+
   if (text === '💬 چت با هوش مصنوعی') {
     await sendMessage(env, chatId, '✍️ پیام خود را بنویسید یا یک عکس ارسال کنید، من پاسخ می‌دهم.');
     return;
@@ -897,6 +1366,31 @@ async function handleIncomingMessage(env, ctx, message) {
 
   if (text === '🎭 تغییر شخصیت') {
     await handlePersonaMenuForUser(env, chatId, 0);
+    return;
+  }
+
+  if (text === '/help') {
+    await sendMessage(env, chatId, getHelpText());
+    return;
+  }
+
+  if (text.startsWith('/code ')) {
+    await handleCodeCommand(env, chatId, text.slice('/code '.length).trim());
+    return;
+  }
+
+  if (text.startsWith('/status ')) {
+    await handleStatusCommand(env, chatId, text.slice('/status '.length).trim());
+    return;
+  }
+
+  if (text === '/jobs') {
+    await handleJobsCommand(env, chatId);
+    return;
+  }
+
+  if (text.startsWith('/cancel ')) {
+    await handleCancelCommand(env, chatId, text.slice('/cancel '.length).trim());
     return;
   }
 
@@ -1417,9 +1911,38 @@ async function handleSetup(env, request) {
   }
 }
 
+const recentUpdates = new Map();
+const DEDUP_TTL_MS = 5 * 60 * 1000;
+
+function isDuplicateUpdate(updateId) {
+  if (!updateId) return false;
+  const now = Date.now();
+  const existing = recentUpdates.get(updateId);
+  if (existing && now - existing < DEDUP_TTL_MS) return true;
+  recentUpdates.set(updateId, now);
+  // Cleanup old entries
+  for (const [id, ts] of recentUpdates.entries()) {
+    if (now - ts > DEDUP_TTL_MS) recentUpdates.delete(id);
+  }
+  return false;
+}
+
 async function handleWebhook(env, ctx, request) {
   try {
     const update = await request.json();
+
+    const updateId = update.update_id;
+    if (updateId && isDuplicateUpdate(updateId)) {
+      return new Response('OK');
+    }
+
+    const webhookSecret = env.KILO_WEBHOOK_SECRET || null;
+    if (webhookSecret) {
+      const provided = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+      if (provided !== webhookSecret) {
+        return new Response('Unauthorized', { status: 401 });
+      }
+    }
 
     if (update.callback_query) {
       ctx.waitUntil(handleCallbackQuery(env, ctx, update.callback_query));
@@ -1478,4 +2001,26 @@ export default {
       })()
     );
   }
+};
+
+// Named exports for testing
+export {
+  callKiloGateway,
+  fetchKiloModels,
+  getKiloApiKey,
+  getKiloChatModel,
+  isKiloConfigured,
+  buildKiloMessages,
+  parseRepo,
+  isRepoAllowed,
+  generateJobId,
+  statusLabel,
+  submitToKiloCloudTrigger,
+  createCodingJob,
+  getCodingJob,
+  updateCodingJobStatus,
+  listUserJobs,
+  escapeHtml,
+  sanitizeAiResponse,
+  isDuplicateUpdate
 };

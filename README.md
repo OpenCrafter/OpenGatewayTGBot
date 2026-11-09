@@ -639,6 +639,149 @@ admin_states (chat_id PK, state, temp_data)
 
 ---
 
+### 🔗 Kilo AI Gateway + Cloud Agent Integration
+
+This bot integrates two separate Kilo services:
+
+| Service | Purpose | Endpoint |
+|---------|---------|----------|
+| **Kilo AI Gateway** | Ordinary AI conversations, questions, explanations | `https://ai-gateway.kilo.ai/api/v1` |
+| **Kilo Cloud Agent** | Repository-based coding tasks (debugging, refactoring, testing) | Trigger URL configured in Kilo dashboard |
+
+These are separate services with separate integrations. No Git or code execution happens inside the Cloudflare Worker — coding tasks run in Kilo-managed cloud environments.
+
+#### Architecture
+
+```
+Telegram
+  │
+  │ HTTPS Webhook
+  ▼
+Cloudflare Worker (worker.js)
+  │
+  ├─ Normal chat (/chat, text messages)
+  │   ▼
+  │ Kilo AI Gateway (OpenAI-compatible)
+  │   POST /chat/completions
+  │
+  └─ Coding tasks (/code owner/repo task)
+      ▼
+  D1: coding_jobs table (job metadata)
+      ▼
+  Kilo Cloud Agent trigger (webhook POST)
+      ▼
+  Kilo-managed workspace → GitHub repository
+      ▼
+  User checks /status JOB_ID (D1 read)
+      ▼
+  Telegram notification
+```
+
+#### Supported Telegram Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message and main menu |
+| `/chat` | Enter Kilo AI Gateway conversation mode |
+| `/code owner/repository task` | Submit a remote coding task |
+| `/status JOB_ID` | Check a coding task's status |
+| `/jobs` | List your recent coding tasks |
+| `/cancel JOB_ID` | Cancel a task (Kilo Cloud Agent cancellation may not be verified) |
+| `/help` | Show command usage |
+
+Existing bot functionality (AI chat via other providers, admin panel, personas, credits, image support) remains fully accessible.
+
+#### Kilo AI Gateway Setup
+
+1. Obtain a Kilo API key from the Kilo dashboard.
+2. Choose a default model (e.g., `anthropic/claude-sonnet-4.5`).
+3. Add the following to your Cloudflare Worker settings:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `KILO_API_KEY` | Secret | Your Kilo API key |
+| `KILO_CHAT_MODEL` | Variable | Default model ID for Kilo Gateway |
+
+4. Users start a Kilo conversation with `/chat`.
+
+#### Kilo Cloud Agent Trigger Setup (Manual Dashboard Step)
+
+The trigger must be created manually in the Kilo dashboard:
+
+1. Go to https://app.kilo.ai/cloud/triggers (personal) or your organization's sidebar.
+2. Connect your GitHub account at https://app.kilo.ai/integrations (required for repo access).
+3. Create a **Webhook** trigger:
+   - Select the repository to use as the workspace.
+   - Select the agent environment profile.
+   - Copy the generated trigger URL.
+4. Add the trigger URL to your Worker settings:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `KILO_CLOUD_TRIGGER_URL` | Secret | Webhook trigger URL from Kilo dashboard |
+| `KILO_CLOUD_TRIGGER_SECRET` | Secret | (Optional) Additional trigger secret header |
+| `KILO_CLOUD_ALLOWLISTED_REPOS` | Variable | Comma-separated `owner/repo` allowlist |
+| `KILO_CLOUD_ALLOWED_TELEGRAM_IDS` | Variable | Comma-separated Telegram chat IDs allowed to use `/code` |
+| `KILO_CLOUD_TRIGGER_URLS` | Variable | (Optional) JSON map of `owner/repo` → trigger URL for multiple repos |
+| `KILO_WEBHOOK_SECRET` | Variable | (Optional) Telegram webhook secret token verification |
+
+**Important:** The exact webhook trigger invocation contract (HTTP method, auth headers, request body schema) is documented by Kilo as beta and subject to change. The Worker submits a `POST` with an internal job payload (`jobId`, `repository`, `task`, `telegramChatId`, `createdAt`) to the trigger URL. The trigger URL itself acts as the primary credential; `KILO_CLOUD_TRIGGER_SECRET` is sent as `X-Kilo-Trigger-Secret` only if configured.
+
+For multiple repositories, create one trigger per repository in the Kilo dashboard and map them via `KILO_CLOUD_TRIGGER_URLS`.
+
+#### Repository Allowlist
+
+Only repositories in `KILO_CLOUD_ALLOWLISTED_REPOS` can be used with `/code`. The admin configures this list. One trigger is tied to one repository (fixed-repository mode).
+
+#### Completion Reporting
+
+Kilo Cloud Agent does not document a native outbound completion callback. Task status is tracked in D1 (`coding_jobs` table). Users check status with `/status JOB_ID`. No progress percentages or execution states are fabricated.
+
+#### Required Cloudflare Bindings
+
+| Binding | Type | Description |
+|---------|------|-------------|
+| `DB` | D1 Database | Cloudflare D1 database (existing) |
+
+#### Deployment Instructions
+
+1. Create a D1 database in Cloudflare dashboard.
+2. Bind it to the Worker as `DB`.
+3. Paste `worker.js` into the Cloudflare Worker editor and deploy.
+4. Set the secrets and variables listed above in Worker Settings → Variables.
+5. Visit `https://YOUR-WORKER.workers.dev/setup?key=ADMIN_ID` to initialize the schema and set the webhook.
+6. Create the Kilo Cloud Agent trigger manually in the Kilo dashboard and add its URL to `KILO_CLOUD_TRIGGER_URL`.
+7. Test `/start`, `/chat`, `/code`, `/status` in Telegram.
+
+#### Testing
+
+Run tests with:
+```
+node test_kilo.mjs
+```
+
+Tests mock external APIs (Kilo Gateway, trigger endpoint) and do not run real paid coding tasks.
+
+#### Limitations and Known Issues
+
+- **Trigger invocation contract undocumented:** The exact HTTP method, auth headers, request body schema, and response shape for firing a Kilo Cloud Agent webhook trigger are not officially documented (beta). The Worker assumes `POST` with the trigger URL as the credential. This is isolated in `submitToKiloCloudTrigger` and can be updated when confirmed.
+- **No native completion callback:** No outbound webhook from Kilo Cloud Agent is documented. Status reporting falls back to persistent D1 records and `/status` checks.
+- **Fixed-repository mode:** One trigger supports one repository. Multiple repositories require multiple triggers mapped via `KILO_CLOUD_TRIGGER_URLS`.
+- **Cancellation:** `/cancel` marks the job as cancelled in D1, but Kilo Cloud Agent may not support verified cancellation of a running session.
+- **No test runner:** Tests use Node.js built-in `assert` with mocked `fetch`.
+
+#### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| `/chat` says Kilo not configured | Set `KILO_API_KEY` and `KILO_CHAT_MODEL` in Worker settings |
+| `/code` says trigger not configured | Create a webhook trigger in Kilo dashboard and set `KILO_CLOUD_TRIGGER_URL` |
+| `/code` says repository not allowlisted | Add the repo to `KILO_CLOUD_ALLOWLISTED_REPOS` |
+| `/status` says job not found | Verify the job ID is correct and you own the job |
+| Trigger submission fails | Verify the trigger URL is correct and the repo is connected in Kilo integrations |
+
+---
+
 ### 🤝 Contributing
 
 Contributions welcome!
