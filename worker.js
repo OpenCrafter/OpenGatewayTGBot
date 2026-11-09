@@ -21,6 +21,107 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
+// ============ Kilo AI Gateway configuration ============
+const KILO_GATEWAY_BASE_URL = 'https://ai-gateway.kilo.ai/api/v1';
+const KILO_CHAT_ENDPOINT = '/chat/completions';
+const KILO_MODELS_ENDPOINT = '/models';
+
+function getKiloApiKey(env) {
+  return env.KILO_API_KEY || null;
+}
+
+function getKiloChatModel(env) {
+  return env.KILO_CHAT_MODEL || null;
+}
+
+function isKiloConfigured(env) {
+  return Boolean(getKiloApiKey(env) && getKiloChatModel(env));
+}
+
+function buildKiloMessages({ systemPrompt, history, userText }) {
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  for (const h of history) {
+    messages.push({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content });
+  }
+  messages.push({ role: 'user', content: userText || '' });
+  return messages;
+}
+
+async function callKiloGateway({ env, model, systemPrompt, history, userText }) {
+  const apiKey = getKiloApiKey(env);
+  if (!apiKey) throw new Error('❌ Kilo AI Gateway is not configured.');
+  const messages = buildKiloMessages({ systemPrompt, history, userText });
+  const url = KILO_GATEWAY_BASE_URL.replace(/\/$/, '') + KILO_CHAT_ENDPOINT;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({ model, messages, temperature: 0.7, max_tokens: 2048 }),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch (_) {
+    data = {};
+  }
+
+  if (!res.ok) {
+    const errMsg = (data && data.error && data.error.message) ? data.error.message : `HTTP ${res.status}`;
+    let userMsg;
+    switch (res.status) {
+      case 401:
+        userMsg = '❌ Kilo AI Gateway API key is invalid.';
+        break;
+      case 402:
+        userMsg = '❌ Kilo AI Gateway balance is insufficient.';
+        break;
+      case 403:
+        userMsg = '❌ Kilo AI Gateway model is not allowed by organization policy.';
+        break;
+      case 429:
+        userMsg = '❌ Kilo AI Gateway rate limit reached. Please try again later.';
+        break;
+      case 413:
+        userMsg = '❌ Kilo AI Gateway request payload is too large.';
+        break;
+      case 502:
+      case 503:
+        userMsg = '❌ Kilo AI Gateway service is temporarily unavailable.';
+        break;
+      default:
+        userMsg = `❌ Kilo AI Gateway error: ${escapeHtml(errMsg)}`;
+    }
+    throw new Error(userMsg);
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('❌ Empty response from Kilo AI Gateway.');
+  return content;
+}
+
+async function fetchKiloModels() {
+  const url = KILO_GATEWAY_BASE_URL.replace(/\/$/, '') + KILO_MODELS_ENDPOINT;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Kilo models fetch failed: HTTP ${res.status}`);
+  const data = await res.json();
+  const list = data.data || [];
+  return list.map(m => m.id).filter(Boolean);
+}
+
 async function dbRun(env, sql, params = []) {
   try {
     const stmt = env.DB.prepare(sql).bind(...params);
@@ -455,7 +556,16 @@ async function callGemini({ baseUrl, apiKey, model, systemPrompt, history, userT
   return content;
 }
 
-async function callAiUniversal({ provider, model, systemPrompt, history, userText, imageBase64, imageMime }) {
+async function callAiUniversal({ provider, model, systemPrompt, history, userText, imageBase64, imageMime, env }) {
+  if (provider && provider.kilo) {
+    return callKiloGateway({
+      env,
+      model,
+      systemPrompt,
+      history,
+      userText
+    });
+  }
   const type = provider.type || detectProviderType(provider.base_url);
   if (type === 'gemini') {
     return callGemini({
