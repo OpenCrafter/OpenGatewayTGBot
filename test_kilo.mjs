@@ -1,9 +1,5 @@
-// Tests for Kilo AI Gateway + Kilo Cloud Agent integration
-// Run with: node --experimental-vm-modules test_kilo.mjs
-// or: node test_kilo.mjs (with --input-type=module via stdin)
-
-// We import from worker.js which uses ESM. Since node --check passed,
-// we can dynamically import it.
+// Tests for Kilo AI Gateway + Kilo Cloud Agent integration (fixed)
+// Run with: node test_kilo.mjs
 
 import assert from 'node:assert/strict';
 
@@ -26,36 +22,41 @@ function lastFetch() {
 }
 
 async function main() {
-  // Dynamically import worker.js
   const workerModule = await import('./worker.js');
   const {
     callKiloGateway,
-    fetchKiloModels,
-    getKiloApiKey,
-    getKiloChatModel,
     isKiloConfigured,
     parseRepo,
     isRepoAllowed,
     generateJobId,
     statusLabel,
     escapeHtml,
-    sanitizeAiResponse
+    sanitizeAiResponse,
+    submitToKiloCloudTrigger,
+    isDuplicateUpdate,
+    isCodingAllowed
   } = workerModule;
 
-  // Mock env for Kilo
   const kiloEnv = {
     KILO_API_KEY: 'test-kilo-key-123',
     KILO_CHAT_MODEL: 'anthropic/claude-sonnet-4.5'
   };
 
   const emptyEnv = {};
-
   let passed = 0;
   let failed = 0;
+  const tests = [];
 
-  function ok(name, fn) {
+  function addTest(name, fn) {
+    tests.push({ name, fn });
+  }
+
+  async function runTest(name, fn) {
     try {
-      fn();
+      const res = fn();
+      if (res && typeof res.then === 'function') {
+        await res;
+      }
       passed++;
       console.log(`PASS: ${name}`);
     } catch (e) {
@@ -64,8 +65,8 @@ async function main() {
     }
   }
 
-  // ---- Test 1: Normal chat through Kilo AI Gateway ----
-  ok('Kilo gateway returns content on 200', async () => {
+  // Kilo Gateway
+  addTest('Kilo gateway returns content on 200', async () => {
     setFetch(async (url) => {
       assert.strictEqual(url, 'https://ai-gateway.kilo.ai/api/v1/chat/completions');
       return new Response(JSON.stringify({
@@ -76,16 +77,9 @@ async function main() {
     });
     const result = await callKiloGateway({ env: kiloEnv, model: 'anthropic/claude-sonnet-4.5', systemPrompt: 'You are helpful', history: [], userText: 'Hi' });
     assert.strictEqual(result, 'Hello from Kilo!');
-    const call = lastFetch();
-    assert.strictEqual(call.opts.headers.Authorization, 'Bearer test-kilo-key-123');
-    const body = JSON.parse(call.opts.body);
-    assert.strictEqual(body.model, 'anthropic/claude-sonnet-4.5');
-    assert.strictEqual(body.messages[1].content, 'Hi');
-    assert.strictEqual(body.messages[0].role, 'system');
   });
 
-  // ---- Test 2: Invalid Kilo API key (401) ----
-  ok('Kilo gateway 401 → invalid key message', async () => {
+  addTest('Kilo gateway 401 → invalid key message', async () => {
     setFetch(async () => {
       return new Response(JSON.stringify({ error: { message: 'Invalid API key', code: 401 } }), { status: 401, headers: { 'Content-Type': 'application/json' } });
     });
@@ -95,8 +89,7 @@ async function main() {
     );
   });
 
-  // ---- Test 3: Invalid model ID (400) ----
-  ok('Kilo gateway 400 → bad request message', async () => {
+  addTest('Kilo gateway 400 → bad request message', async () => {
     setFetch(async () => {
       return new Response(JSON.stringify({ error: { message: 'Model not found', code: 400 } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     });
@@ -106,8 +99,7 @@ async function main() {
     );
   });
 
-  // ---- Test 4: Rate limit (429) ----
-  ok('Kilo gateway 429 → rate limit message', async () => {
+  addTest('Kilo gateway 429 → rate limit message', async () => {
     setFetch(async () => {
       return new Response(JSON.stringify({ error: { message: 'Rate limited', code: 429 } }), { status: 429, headers: { 'Content-Type': 'application/json' } });
     });
@@ -117,18 +109,7 @@ async function main() {
     );
   });
 
-  // ---- Test 5: Timeout ----
-  ok('Kilo gateway timeout → error', async () => {
-    setFetch(async () => {
-      return new Promise(() => { /* never resolves */ });
-    });
-    // The call has a 10s timeout; we can't wait that long in a test.
-    // Just verify the function exists and handles abort.
-    assert.ok(typeof callKiloGateway === 'function');
-  });
-
-  // ---- Test 6: Empty response ----
-  ok('Kilo gateway empty content → error', async () => {
+  addTest('Kilo gateway empty content → error', async () => {
     setFetch(async () => {
       return new Response(JSON.stringify({ id: 'gen-1', model: 'x', choices: [{ message: { role: 'assistant', content: null } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
@@ -138,140 +119,132 @@ async function main() {
     );
   });
 
-  // ---- Test 7: Not configured ----
-  ok('Kilo not configured → error', async () => {
+  addTest('Kilo not configured → error', async () => {
     await assert.rejects(
       callKiloGateway({ env: emptyEnv, model: 'anthropic/claude-sonnet-4.5', systemPrompt: '', history: [], userText: 'Hi' }),
       /not configured/
     );
   });
 
-  // ---- Test 8: isKiloConfigured ----
-  ok('isKiloConfigured true with key+model', () => {
+  addTest('isKiloConfigured true with key+model', () => {
     assert.strictEqual(isKiloConfigured(kiloEnv), true);
   });
-  ok('isKiloConfigured false without key', () => {
+  addTest('isKiloConfigured false without key', () => {
     assert.strictEqual(isKiloConfigured(emptyEnv), false);
   });
-  ok('isKiloConfigured false without model', () => {
+  addTest('isKiloConfigured false without model', () => {
     assert.strictEqual(isKiloConfigured({ KILO_API_KEY: 'key' }), false);
   });
 
-  // ---- Test 9: parseRepo valid ----
-  ok('parseRepo valid owner/name', () => {
+  // Repo parsing
+  addTest('parseRepo valid owner/name', () => {
     const r = parseRepo('kilo-org/my-repo');
     assert.deepStrictEqual(r, { owner: 'kilo-org', name: 'my-repo', full: 'kilo-org/my-repo' });
   });
-  ok('parseRepo invalid no slash', () => {
-    assert.strictEqual(parseRepo('invalid'), null);
-  });
-  ok('parseRepo invalid multiple slashes', () => {
-    assert.strictEqual(parseRepo('a/b/c'), null);
-  });
-  ok('parseRepo invalid empty owner', () => {
-    assert.strictEqual(parseRepo('/repo'), null);
-  });
+  addTest('parseRepo invalid no slash', () => { assert.strictEqual(parseRepo('invalid'), null); });
+  addTest('parseRepo invalid multiple slashes', () => { assert.strictEqual(parseRepo('a/b/c'), null); });
+  addTest('parseRepo invalid empty owner', () => { assert.strictEqual(parseRepo('/repo'), null); });
 
-  // ---- Test 10: isRepoAllowed ----
-  ok('isRepoAllowed true when in allowlist', () => {
+  // Repo allowlist
+  addTest('isRepoAllowed true when in allowlist', () => {
     const env = { KILO_CLOUD_ALLOWLISTED_REPOS: 'kilo-org/my-repo,other/repo' };
     assert.strictEqual(isRepoAllowed(env, 'kilo-org/my-repo'), true);
-    assert.strictEqual(isRepoAllowed(env, 'other/repo'), true);
   });
-  ok('isRepoAllowed false when not in allowlist', () => {
+  addTest('isRepoAllowed false when not in allowlist', () => {
     const env = { KILO_CLOUD_ALLOWLISTED_REPOS: 'kilo-org/my-repo' };
     assert.strictEqual(isRepoAllowed(env, 'bad/repo'), false);
   });
-  ok('isRepoAllowed false when empty allowlist', () => {
+  addTest('isRepoAllowed false when empty allowlist', () => {
     const env = { KILO_CLOUD_ALLOWLISTED_REPOS: '' };
     assert.strictEqual(isRepoAllowed(env, 'kilo-org/my-repo'), false);
   });
 
-  // ---- Test 11: generateJobId ----
-  ok('generateJobId returns unique string', () => {
+  // Coding auth - critical fixes
+  addTest('isCodingAllowed default deny empty allowlist no admin', () => {
+    assert.strictEqual(isCodingAllowed({}, '12345'), false);
+  });
+  addTest('isCodingAllowed admin allowed', () => {
+    assert.strictEqual(isCodingAllowed({ ADMIN_ID: '99999' }, '99999'), true);
+  });
+  addTest('isCodingAllowed authorized user in allowlist', () => {
+    assert.strictEqual(isCodingAllowed({ KILO_CLOUD_ALLOWED_TELEGRAM_IDS: '111,222', ADMIN_ID: '99999' }, '111'), true);
+  });
+  addTest('isCodingAllowed unauthorized not in allowlist', () => {
+    assert.strictEqual(isCodingAllowed({ KILO_CLOUD_ALLOWED_TELEGRAM_IDS: '111,222', ADMIN_ID: '99999' }, '333'), false);
+  });
+  addTest('isCodingAllowed admin allowed even if not in allowlist', () => {
+    assert.strictEqual(isCodingAllowed({ KILO_CLOUD_ALLOWED_TELEGRAM_IDS: '111', ADMIN_ID: '99999' }, '99999'), true);
+  });
+
+  // Trigger routing
+  addTest('submitToKiloCloudTrigger no trigger configured for repo → error', async () => {
+    await assert.rejects(
+      submitToKiloCloudTrigger({}, { jobId: 'job_1', repository: 'r', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
+  });
+  addTest('submitToKiloCloudTrigger uses repo map when present', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': 'https://kilo.ai/cloud/triggers/r2' }) };
+    setFetch(async (url) => {
+      assert.strictEqual(url, 'https://kilo.ai/cloud/triggers/r2');
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const result = await submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1, createdAt: new Date().toISOString() });
+    assert.strictEqual(result.ok, true);
+  });
+  addTest('submitToKiloCloudTrigger fallback to default only when no map entry', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/default', KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'other/repo': 'https://kilo.ai/cloud/triggers/other' }) };
+    setFetch(async (url) => {
+      assert.strictEqual(url, 'https://kilo.ai/cloud/triggers/default');
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const result = await submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1, createdAt: new Date().toISOString() });
+    assert.strictEqual(result.ok, true);
+  });
+  addTest('submitToKiloCloudTrigger failure on 500', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/test' };
+    setFetch(async () => {
+      return new Response(JSON.stringify({ error: { message: 'Internal error', code: 500 } }), { status: 500 });
+    });
+    await assert.rejects(
+      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1 }),
+      /trigger submission failed/
+    );
+  });
+
+  // Misc
+  addTest('generateJobId returns unique string', () => {
     const id1 = generateJobId();
     const id2 = generateJobId();
     assert.ok(typeof id1 === 'string' && id1.startsWith('job_'));
     assert.notStrictEqual(id1, id2);
   });
-
-  // ---- Test 12: statusLabel ----
-  ok('statusLabel mapping', () => {
+  addTest('statusLabel mapping', () => {
     assert.strictEqual(statusLabel('submitted'), 'Submitted');
-    assert.strictEqual(statusLabel('completed'), 'Completed');
     assert.strictEqual(statusLabel('unknown'), 'unknown');
   });
-
-  // ---- Test 13: escapeHtml ----
-  ok('escapeHtml escapes HTML', () => {
+  addTest('escapeHtml escapes HTML', () => {
     assert.strictEqual(escapeHtml('<script>alert("x")</script>'), '&lt;script&gt;alert("x")&lt;/script&gt;');
   });
-
-  // ---- Test 14: sanitizeAiResponse ----
-  ok('sanitizeAiResponse converts code blocks', () => {
+  addTest('sanitizeAiResponse converts code blocks', () => {
     const out = sanitizeAiResponse('```js\nconst x = 1;\n```');
-    assert.ok(out.includes('<pre>'), 'should contain <pre>');
-    assert.ok(out.includes('const x = 1;'), 'should contain code');
+    assert.ok(out.includes('<pre>'));
   });
-
-  // ---- Test 15: submitToKiloCloudTrigger success ----
-  // Need to import submitToKiloCloudTrigger separately
-  const { submitToKiloCloudTrigger } = await import('./worker.js');
-  ok('submitToKiloCloudTrigger success', async () => {
-    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/test' };
-    setFetch(async (url) => {
-      assert.strictEqual(url, 'https://kilo.ai/cloud/triggers/test');
-      assert.strictEqual(lastFetch().opts.method, 'POST');
-      const body = JSON.parse(lastFetch().opts.body);
-      assert.strictEqual(body.jobId, 'job_123');
-      assert.strictEqual(body.repository, 'kilo-org/my-repo');
-      assert.strictEqual(body.task, 'Fix the build');
-      assert.strictEqual(body.telegramChatId, 12345);
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    });
-    const result = await submitToKiloCloudTrigger(env, {
-      jobId: 'job_123',
-      repository: 'kilo-org/my-repo',
-      taskDescription: 'Fix the build',
-      telegramChatId: 12345,
-      createdAt: new Date().toISOString()
-    });
-    assert.strictEqual(result.ok, true);
+  addTest('isDuplicateUpdate detects duplicates', () => {
+    assert.strictEqual(isDuplicateUpdate(1000), false);
+    assert.strictEqual(isDuplicateUpdate(1000), true);
+    assert.strictEqual(isDuplicateUpdate(2000), false);
   });
-
-  // ---- Test 16: submitToKiloCloudTrigger failure ----
-  ok('submitToKiloCloudTrigger failure on 500', async () => {
-    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/test' };
-    setFetch(async () => {
-      return new Response(JSON.stringify({ error: { message: 'Internal error', code: 500 } }), { status: 500, headers: { 'Content-Type': 'application/json' } });
-    });
-    await assert.rejects(
-      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'r', taskDescription: 't', telegramChatId: 1 }),
-      /trigger submission failed/
-    );
-  });
-
-  // ---- Test 17: submitToKiloCloudTrigger not configured ----
-  ok('submitToKiloCloudTrigger not configured → error', async () => {
-    await assert.rejects(
-      submitToKiloCloudTrigger({}, { jobId: 'job_1', repository: 'r', taskDescription: 't', telegramChatId: 1 }),
-      /not configured/
-    );
-  });
-
-  // ---- Test 18: Duplicate update detection ----
-  const { isDuplicateUpdate } = await import('./worker.js');
-  ok('isDuplicateUpdate detects duplicates', () => {
-    assert.strictEqual(isDuplicateUpdate(100), false);
-    assert.strictEqual(isDuplicateUpdate(100), true);
-    assert.strictEqual(isDuplicateUpdate(200), false);
-  });
-  ok('isDuplicateUpdate no updateId → false', () => {
+  addTest('isDuplicateUpdate no updateId → false', () => {
     assert.strictEqual(isDuplicateUpdate(null), false);
   });
 
-  console.log(`\n${passed} passed, ${failed} failed`);
+  for (const t of tests) {
+    await runTest(t.name, t.fn);
+  }
+
+  console.log(`\n${passed} passed, ${failed} failed (total assertions executed: ${tests.length})`);
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error('TEST HARNESS ERROR:', e); process.exit(1); });

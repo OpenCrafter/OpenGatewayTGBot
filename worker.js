@@ -984,10 +984,16 @@ function isRepoAllowed(env, repository) {
 }
 
 function isCodingAllowed(env, chatId) {
+  const adminId = env.ADMIN_ID;
+  const chatIdStr = String(chatId);
+  if (adminId && chatIdStr === String(adminId)) {
+    return true;
+  }
   const allowedIds = getAllowedTelegramIds(env);
-  if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(String(chatId))) return false;
-  if (String(chatId) === String(env.ADMIN_ID)) return true;
-  return true;
+  if (!allowedIds || allowedIds.length === 0) {
+    return false;
+  }
+  return allowedIds.includes(chatIdStr);
 }
 
 async function createCodingJob(env, job) {
@@ -1025,15 +1031,24 @@ async function listUserJobs(env, chatId, limit = 10) {
   );
 }
 
-async function submitToKiloCloudTrigger(env, job) {
-  const triggerUrl = getCloudTriggerUrl(env);
-  if (!triggerUrl) throw new Error('❌ Kilo Cloud Agent trigger URL is not configured.');
-
+function getTriggerForRepo(env, repository) {
   const triggerUrlMap = getTriggerUrlMap(env);
-  let actualUrl = triggerUrl;
-  if (triggerUrlMap[job.repository]) {
-    actualUrl = triggerUrlMap[job.repository];
+  if (triggerUrlMap && triggerUrlMap[repository]) {
+    return { url: triggerUrlMap[repository], source: 'map' };
   }
+  const triggerUrl = getCloudTriggerUrl(env);
+  if (!triggerUrl) {
+    return null;
+  }
+  return { url: triggerUrl, source: 'default' };
+}
+
+async function submitToKiloCloudTrigger(env, job) {
+  const triggerInfo = getTriggerForRepo(env, job.repository);
+  if (!triggerInfo || !triggerInfo.url) {
+    throw new Error('❌ Kilo Cloud Agent trigger URL is not configured for repository ' + job.repository + '.');
+  }
+  const actualUrl = triggerInfo.url;
 
   const secret = getCloudTriggerSecret(env);
   const headers = {
@@ -1163,10 +1178,9 @@ async function handleCodeCommand(env, chatId, input) {
     return;
   }
 
-  const triggerUrl = getCloudTriggerUrl(env);
-  const triggerUrlMap = getTriggerUrlMap(env);
-  if (!triggerUrl && !triggerUrlMap[parsed.full]) {
-    await sendMessage(env, chatId, '⚠️ No Kilo Cloud Agent trigger is configured. Contact the admin.');
+  const triggerInfo = getTriggerForRepo(env, parsed.full);
+  if (!triggerInfo || !triggerInfo.url) {
+    await sendMessage(env, chatId, '⚠️ No Kilo Cloud Agent trigger is configured for this repository. Configure a trigger for this repository or update the repository-to-trigger mapping.');
     return;
   }
 
@@ -1932,19 +1946,19 @@ function isDuplicateUpdate(updateId) {
 
 async function handleWebhook(env, ctx, request) {
   try {
-    const update = await request.json();
-
-    const updateId = update.update_id;
-    if (updateId && isDuplicateUpdate(updateId)) {
-      return new Response('OK');
-    }
-
     const webhookSecret = env.KILO_WEBHOOK_SECRET || null;
     if (webhookSecret) {
       const provided = request.headers.get('X-Telegram-Bot-Api-Secret-Token');
       if (provided !== webhookSecret) {
         return new Response('Unauthorized', { status: 401 });
       }
+    }
+
+    const update = await request.json();
+
+    const updateId = update.update_id;
+    if (updateId && isDuplicateUpdate(updateId)) {
+      return new Response('OK');
     }
 
     if (update.callback_query) {
@@ -2025,5 +2039,6 @@ export {
   listUserJobs,
   escapeHtml,
   sanitizeAiResponse,
-  isDuplicateUpdate
+  isDuplicateUpdate,
+  isCodingAllowed
 };
