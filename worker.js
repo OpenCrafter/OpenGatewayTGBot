@@ -1033,14 +1033,14 @@ async function listUserJobs(env, chatId, limit = 10) {
 
 function getTriggerForRepo(env, repository) {
   const triggerUrlMap = getTriggerUrlMap(env);
-  if (triggerUrlMap && triggerUrlMap[repository]) {
-    return { url: triggerUrlMap[repository], source: 'map' };
-  }
-  const triggerUrl = getCloudTriggerUrl(env);
-  if (!triggerUrl) {
+  if (triggerUrlMap && Object.prototype.hasOwnProperty.call(triggerUrlMap, repository)) {
+    const url = triggerUrlMap[repository];
+    if (typeof url === 'string' && url.trim()) {
+      return { url: url.trim(), source: 'map' };
+    }
     return null;
   }
-  return { url: triggerUrl, source: 'default' };
+  return null;
 }
 
 async function submitToKiloCloudTrigger(env, job) {
@@ -1180,7 +1180,7 @@ async function handleCodeCommand(env, chatId, input) {
 
   const triggerInfo = getTriggerForRepo(env, parsed.full);
   if (!triggerInfo || !triggerInfo.url) {
-    await sendMessage(env, chatId, '⚠️ No Kilo Cloud Agent trigger is configured for this repository. Configure a trigger for this repository or update the repository-to-trigger mapping.');
+    await sendMessage(env, chatId, '⚠️ No exact Kilo Cloud Agent trigger mapping found for repository ' + escapeHtml(parsed.full) + '. Configure an entry in KILO_CLOUD_TRIGGER_URLS for this owner/repo.');
     return;
   }
 

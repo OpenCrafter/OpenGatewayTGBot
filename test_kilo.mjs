@@ -176,14 +176,8 @@ async function main() {
     assert.strictEqual(isCodingAllowed({ KILO_CLOUD_ALLOWED_TELEGRAM_IDS: '111', ADMIN_ID: '99999' }, '99999'), true);
   });
 
-  // Trigger routing
-  addTest('submitToKiloCloudTrigger no trigger configured for repo → error', async () => {
-    await assert.rejects(
-      submitToKiloCloudTrigger({}, { jobId: 'job_1', repository: 'r', taskDescription: 't', telegramChatId: 1 }),
-      /trigger URL is not configured for repository/
-    );
-  });
-  addTest('submitToKiloCloudTrigger uses repo map when present', async () => {
+  // Trigger routing - critical fixes
+  addTest('submitToKiloCloudTrigger uses exact mapping when present', async () => {
     const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': 'https://kilo.ai/cloud/triggers/r2' }) };
     setFetch(async (url) => {
       assert.strictEqual(url, 'https://kilo.ai/cloud/triggers/r2');
@@ -192,17 +186,42 @@ async function main() {
     const result = await submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1, createdAt: new Date().toISOString() });
     assert.strictEqual(result.ok, true);
   });
-  addTest('submitToKiloCloudTrigger fallback to default only when no map entry', async () => {
-    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/default', KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'other/repo': 'https://kilo.ai/cloud/triggers/other' }) };
-    setFetch(async (url) => {
-      assert.strictEqual(url, 'https://kilo.ai/cloud/triggers/default');
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    });
-    const result = await submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1, createdAt: new Date().toISOString() });
-    assert.strictEqual(result.ok, true);
+  addTest('submitToKiloCloudTrigger unmapped repo rejected', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': 'https://kilo.ai/cloud/triggers/r2' }) };
+    await assert.rejects(
+      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'other/repo', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
+  });
+  addTest('submitToKiloCloudTrigger mapping for another repo cannot be used as fallback', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': 'https://kilo.ai/cloud/triggers/r2' }), KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/default' };
+    await assert.rejects(
+      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'unmapped/repo', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
+  });
+  addTest('submitToKiloCloudTrigger malformed mapping fails safely', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URLS: 'not-json' };
+    await assert.rejects(
+      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
+  });
+  addTest('submitToKiloCloudTrigger empty string mapping fails safely', async () => {
+    const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': '' }) };
+    await assert.rejects(
+      submitToKiloCloudTrigger(env, { jobId: 'job_1', repository: 'kilo-org/repo', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
+  });
+  addTest('submitToKiloCloudTrigger no trigger configured for repo → error', async () => {
+    await assert.rejects(
+      submitToKiloCloudTrigger({}, { jobId: 'job_1', repository: 'r', taskDescription: 't', telegramChatId: 1 }),
+      /trigger URL is not configured for repository/
+    );
   });
   addTest('submitToKiloCloudTrigger failure on 500', async () => {
-    const env = { KILO_CLOUD_TRIGGER_URL: 'https://kilo.ai/cloud/triggers/test' };
+    const env = { KILO_CLOUD_TRIGGER_URLS: JSON.stringify({ 'kilo-org/repo': 'https://kilo.ai/cloud/triggers/test' }) };
     setFetch(async () => {
       return new Response(JSON.stringify({ error: { message: 'Internal error', code: 500 } }), { status: 500 });
     });

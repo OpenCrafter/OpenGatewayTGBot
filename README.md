@@ -397,16 +397,14 @@ The trigger must be created manually in the Kilo dashboard:
 | `KILO_CLOUD_TRIGGER_SECRET` | Secret | (Optional) Additional trigger secret header |
 | `KILO_CLOUD_ALLOWLISTED_REPOS` | Variable | Comma-separated `owner/repo` allowlist |
 | `KILO_CLOUD_ALLOWED_TELEGRAM_IDS` | Variable | Comma-separated Telegram chat IDs allowed to use `/code` |
-| `KILO_CLOUD_TRIGGER_URLS` | Variable | (Optional) JSON map of `owner/repo` → trigger URL for multiple repos |
+| `KILO_CLOUD_TRIGGER_URLS` | Variable | JSON map of `owner/repo` → trigger URL. **Required per repository** with exact owner/repo matches (no global fallback). |
 | `KILO_WEBHOOK_SECRET` | Variable | (Optional) Telegram webhook secret token verification |
 
-**Important:** The exact webhook trigger invocation contract (HTTP method, auth headers, request body schema) is documented by Kilo as beta and subject to change. The Worker submits a `POST` with an internal job payload (`jobId`, `repository`, `task`, `telegramChatId`, `createdAt`) to the trigger URL. The trigger URL itself acts as the primary credential; `KILO_CLOUD_TRIGGER_SECRET` is sent as `X-Kilo-Trigger-Secret` only if configured.
-
-For multiple repositories, create one trigger per repository in the Kilo dashboard and map them via `KILO_CLOUD_TRIGGER_URLS`.
+**Important:** The exact webhook trigger invocation contract (HTTP method, auth headers, request body schema) is documented by Kilo as beta and subject to change. The Worker submits a `POST` with an internal job payload (`jobId`, `repository`, `task`, `telegramChatId`, `createdAt`) to the trigger URL. The trigger URL itself acts as the primary credential; `KILO_CLOUD_TRIGGER_SECRET` is sent as `X-Kilo-Trigger-Secret` only if configured. **Repository routing requires an exact owner/repo entry in `KILO_CLOUD_TRIGGER_URLS` (no global fallback).** For multiple repositories, create one trigger per repository in the Kilo dashboard and add each mapping explicitly.
 
 #### Repository Allowlist
 
-Only repositories in `KILO_CLOUD_ALLOWLISTED_REPOS` can be used with `/code`. The admin configures this list. One trigger is tied to one repository (fixed-repository mode).
+Only repositories in `KILO_CLOUD_ALLOWLISTED_REPOS` can be used with `/code`. The admin configures this list. **Each repository requires an exact owner/repo mapping in `KILO_CLOUD_TRIGGER_URLS` — no global fallback is used.** One trigger is tied to one repository (fixed-repository mode).
 
 #### Completion Reporting
 
@@ -447,7 +445,7 @@ Tests mock external APIs (Kilo Gateway, trigger endpoint) and do not run real pa
 
 - **Duplicate update detection is in-memory:** The dedup guard uses a Worker-isolate Map and is lost on cold starts. It provides best-effort protection against duplicate Telegram updates within a single isolate.
 
-- **Fixed-repository mode:** One trigger supports one repository. Multiple repositories require multiple triggers mapped via `KILO_CLOUD_TRIGGER_URLS`.
+- **Fixed-repository mode with explicit mapping:** One trigger supports one repository. **An exact `owner/repo` entry is required in `KILO_CLOUD_TRIGGER_URLS` — no global fallback.** Missing or mismatched mappings are rejected before creating a job.
 
 - **No test runner:** Tests use Node.js built-in `assert` with mocked `fetch`. No regression tests exist for pre-existing bot features.
 
