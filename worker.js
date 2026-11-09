@@ -1128,8 +1128,7 @@ async function handleCodeCommand(env, chatId, input) {
     return;
   }
 
-  const allowedIds = getAllowedTelegramIds(env);
-  if (allowedIds && allowedIds.length > 0 && !allowedIds.includes(String(chatId)) && String(chatId) !== String(env.ADMIN_ID)) {
+  if (!isCodingAllowed(env, chatId)) {
     await sendMessage(env, chatId, '⛔️ You are not authorized to submit coding tasks.');
     return;
   }
@@ -1233,10 +1232,14 @@ async function handleStatusCommand(env, chatId, jobId) {
     `🆔 Job ID: <code>${job.job_id}</code>`,
     `📦 Repository: <code>${escapeHtml(job.repository)}</code>`,
     `📝 Task: ${escapeHtml(job.task_description)}`,
-    `📊 Status: <b>${statusLabel(job.status)}</b>`,
+    `📊 Status: <b>${statusLabel(job.status)}</b> (local record)`,
     `🕒 Created: ${escapeHtml(job.created_at)}`,
     `🕒 Updated: ${escapeHtml(job.updated_at)}`
   ];
+
+  if (job.status === 'submitted') {
+    lines.push(`ℹ️ Note: No execution status updates are received from Kilo Cloud Agent. This status reflects the Worker's local record only.`);
+  }
 
   if (job.branch_url) lines.push(`🌿 Branch: ${escapeHtml(job.branch_url)}`);
   if (job.pull_request_url) lines.push(`🔗 PR: ${escapeHtml(job.pull_request_url)}`);
@@ -1289,7 +1292,7 @@ async function handleCancelCommand(env, chatId, jobId) {
   }
 
   await updateCodingJobStatus(env, jobId, { status: 'cancelled' });
-  await sendMessage(env, chatId, `✅ Job <code>${jobId}</code> marked as cancelled. Note: Kilo Cloud Agent may not support verified cancellation; the running session may continue.`);
+  await sendMessage(env, chatId, `✅ Job <code>${jobId}</code> marked as cancelled in local records. Note: Kilo Cloud Agent does not document a verified cancellation mechanism; the running session may continue.`);
 }
 
 async function handleIncomingMessage(env, ctx, message) {

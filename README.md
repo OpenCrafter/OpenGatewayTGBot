@@ -764,11 +764,17 @@ Tests mock external APIs (Kilo Gateway, trigger endpoint) and do not run real pa
 
 #### Limitations and Known Issues
 
-- **Trigger invocation contract undocumented:** The exact HTTP method, auth headers, request body schema, and response shape for firing a Kilo Cloud Agent webhook trigger are not officially documented (beta). The Worker assumes `POST` with the trigger URL as the credential. This is isolated in `submitToKiloCloudTrigger` and can be updated when confirmed.
-- **No native completion callback:** No outbound webhook from Kilo Cloud Agent is documented. Status reporting falls back to persistent D1 records and `/status` checks.
+- **Trigger invocation contract undocumented:** The exact HTTP method, auth headers, request body schema, and response shape for firing a Kilo Cloud Agent webhook trigger are not officially documented (beta). The Worker assumes `POST` with the trigger URL as the credential. This is isolated in `submitToKiloCloudTrigger` and can be updated when confirmed. **Do not assume remote coding tasks work end-to-end until tested against a real, authorized, non-production repository.**
+
+- **Status is local record only:** `/status` shows the Worker's local D1 record status (e.g., `submitted`, `failed`, `cancelled`). No execution status updates are received from Kilo Cloud Agent (no native outbound callback is documented). A job showing `submitted` does not mean the Cloud Agent is actively running it.
+
+- **Cancellation is local only:** `/cancel` marks the job as cancelled in D1 records only. Kilo Cloud Agent does not document a verified cancellation mechanism; the running session may continue.
+
+- **Duplicate update detection is in-memory:** The dedup guard uses a Worker-isolate Map and is lost on cold starts. It provides best-effort protection against duplicate Telegram updates within a single isolate.
+
 - **Fixed-repository mode:** One trigger supports one repository. Multiple repositories require multiple triggers mapped via `KILO_CLOUD_TRIGGER_URLS`.
-- **Cancellation:** `/cancel` marks the job as cancelled in D1, but Kilo Cloud Agent may not support verified cancellation of a running session.
-- **No test runner:** Tests use Node.js built-in `assert` with mocked `fetch`.
+
+- **No test runner:** Tests use Node.js built-in `assert` with mocked `fetch`. No regression tests exist for pre-existing bot features.
 
 #### Troubleshooting
 
